@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from croniter import croniter
@@ -40,7 +40,7 @@ class Worker:
         if not due:
             return
 
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         for schedule in due:
             run = await self.repo.create_run(mode='scheduled', search_config=schedule.get('payload', {}))
             await self.repo.enqueue_job(payload={'type': 'run_hunt', 'run_id': str(run['id'])}, run_id=run['id'])

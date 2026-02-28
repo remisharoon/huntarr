@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import os
+import random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from playwright.async_api import Browser, BrowserContext, Page, async_playwright
+from playwright.async_api import Page, async_playwright
 
+from huntarr_core.browser.adapters import resolve_adapter
 from huntarr_core.connectors.policies import can_use_authenticated_flow, is_restricted_platform
 
 
@@ -43,16 +45,18 @@ class ApplicationEngine:
 
         screenshot_dir = self.artifact_root / str(run_id) / str(job["id"])
         screenshot_dir.mkdir(parents=True, exist_ok=True)
-        screenshot_path = screenshot_dir / "landing.png"
+        landing_path = screenshot_dir / "landing.png"
+        postfill_path = screenshot_dir / "postfill.png"
+        result_path = screenshot_dir / "result.png"
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=self.headless)
             context = await browser.new_context(user_agent=self._randomized_user_agent())
             page = await context.new_page()
             try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=45000)
-                await asyncio.sleep(1.2)
-                await page.screenshot(path=str(screenshot_path), full_page=True)
+                await page.goto(url, wait_until="domcontentloaded", timeout=50000)
+                await self._random_delay(0.9, 1.8)
+                await page.screenshot(path=str(landing_path), full_page=True)
 
                 has_captcha = await self._detect_captcha(page)
                 if has_captcha:
@@ -63,7 +67,7 @@ class ApplicationEngine:
                         failure_code="captcha_detected",
                         needs_manual_action=True,
                         manual_action_type="captcha",
-                        artifacts={"landing_screenshot": str(screenshot_path)},
+                        artifacts={"landing_screenshot": str(landing_path)},
                     )
 
                 login_hint = await self._detect_login_gate(page)
@@ -73,7 +77,7 @@ class ApplicationEngine:
                         status="skipped",
                         source_portal=domain,
                         failure_code="restricted_platform_login_required",
-                        artifacts={"landing_screenshot": str(screenshot_path)},
+                        artifacts={"landing_screenshot": str(landing_path)},
                     )
 
                 if login_hint and not can_use_authenticated_flow(url):
@@ -82,21 +86,43 @@ class ApplicationEngine:
                         status="skipped",
                         source_portal=domain,
                         failure_code="login_not_allowed",
-                        artifacts={"landing_screenshot": str(screenshot_path)},
+                        artifacts={"landing_screenshot": str(landing_path)},
                     )
 
-                await self._fill_common_fields(page, profile)
-                await self._attach_documents_if_supported(page, generated_docs)
+                adapter = resolve_adapter(url)
+                adapter_result = await adapter.prefill(page, profile, generated_docs)
+                await self._random_delay(0.5, 1.1)
+                await page.screenshot(path=str(postfill_path), full_page=True)
 
+                artifacts = {
+                    "landing_screenshot": str(landing_path),
+                    "postfill_screenshot": str(postfill_path),
+                    "adapter": adapter.name,
+                }
+                if adapter_result.artifacts:
+                    artifacts.update(adapter_result.artifacts)
+
+                if adapter_result.needs_manual_action:
+                    await browser.close()
+                    return ApplyResult(
+                        status="manual_required",
+                        source_portal=domain,
+                        failure_code=adapter_result.failure_code or "adapter_manual_required",
+                        needs_manual_action=True,
+                        manual_action_type=adapter_result.manual_action_type or "unexpected_form",
+                        artifacts=artifacts,
+                    )
+
+                has_captcha = await self._detect_captcha(page)
                 if has_captcha:
                     await browser.close()
                     return ApplyResult(
                         status="manual_required",
                         source_portal=domain,
-                        failure_code="captcha_after_fill",
+                        failure_code="captcha_after_prefill",
                         needs_manual_action=True,
                         manual_action_type="captcha",
-                        artifacts={"landing_screenshot": str(screenshot_path)},
+                        artifacts=artifacts,
                     )
 
                 if not submit:
@@ -104,30 +130,40 @@ class ApplicationEngine:
                     return ApplyResult(
                         status="in_progress",
                         source_portal=domain,
-                        artifacts={"landing_screenshot": str(screenshot_path)},
+                        artifacts=artifacts,
                     )
 
-                if os.getenv("AUTO_SUBMIT_ENABLED", "true").lower() == "true":
-                    submitted = await self._submit_if_possible(page)
-                    confirmation = None
-                    if submitted:
-                        confirmation = await self._extract_confirmation(page)
+                if os.getenv("AUTO_SUBMIT_ENABLED", "true").lower() != "true":
                     await browser.close()
                     return ApplyResult(
-                        status="submitted" if submitted else "manual_required",
+                        status="in_progress",
                         source_portal=domain,
-                        failure_code=None if submitted else "submit_button_not_found",
-                        confirmation_text=confirmation,
-                        needs_manual_action=not submitted,
-                        manual_action_type=None if submitted else "unexpected_form",
-                        artifacts={"landing_screenshot": str(screenshot_path)},
+                        artifacts=artifacts,
                     )
 
+                submitted = await adapter.submit(page)
+                await self._random_delay(0.7, 1.6)
+                await page.screenshot(path=str(result_path), full_page=True)
+                artifacts["result_screenshot"] = str(result_path)
+
+                if not submitted:
+                    await browser.close()
+                    return ApplyResult(
+                        status="manual_required",
+                        source_portal=domain,
+                        failure_code="submit_button_not_found",
+                        needs_manual_action=True,
+                        manual_action_type="unexpected_form",
+                        artifacts=artifacts,
+                    )
+
+                confirmation = await adapter.extract_confirmation(page)
                 await browser.close()
                 return ApplyResult(
-                    status="in_progress",
+                    status="submitted",
                     source_portal=domain,
-                    artifacts={"landing_screenshot": str(screenshot_path)},
+                    confirmation_text=confirmation,
+                    artifacts=artifacts,
                 )
 
             except Exception as exc:  # noqa: BLE001
@@ -136,96 +172,47 @@ class ApplicationEngine:
                     status="failed",
                     source_portal=domain,
                     failure_code=f"playwright_error:{type(exc).__name__}",
-                    artifacts={"landing_screenshot": str(screenshot_path)},
+                    artifacts={
+                        "landing_screenshot": str(landing_path),
+                        "adapter": resolve_adapter(url).name,
+                    },
                 )
 
     async def _detect_captcha(self, page: Page) -> bool:
         selectors = [
             "iframe[src*='captcha']",
+            "iframe[title*='captcha' i]",
             "div.g-recaptcha",
             "#captcha",
             "text=I am not a robot",
             "text=verify you are human",
+            "text=Security Check",
         ]
         for selector in selectors:
             try:
-                if await page.locator(selector).first.is_visible(timeout=500):
+                if await page.locator(selector).first.is_visible(timeout=700):
                     return True
             except Exception:
                 continue
         return False
 
     async def _detect_login_gate(self, page: Page) -> bool:
-        selectors = ["text=Sign in", "text=Log in", "input[type='password']"]
+        selectors = [
+            "text=Sign in",
+            "text=Log in",
+            "text=Create account",
+            "input[type='password']",
+        ]
         for selector in selectors:
             try:
-                if await page.locator(selector).first.is_visible(timeout=350):
+                if await page.locator(selector).first.is_visible(timeout=450):
                     return True
             except Exception:
                 continue
         return False
 
-    async def _fill_common_fields(self, page: Page, profile: dict[str, Any]) -> None:
-        text_map = {
-            "name": profile.get("full_name", ""),
-            "full name": profile.get("full_name", ""),
-            "email": profile.get("email", ""),
-            "phone": profile.get("phone", ""),
-            "location": profile.get("location", ""),
-        }
-
-        for label, value in text_map.items():
-            if not value:
-                continue
-            try:
-                locator = page.get_by_label(label, exact=False)
-                if await locator.count() > 0:
-                    await locator.first.fill(str(value), timeout=900)
-            except Exception:
-                continue
-
-    async def _attach_documents_if_supported(self, page: Page, docs: dict[str, str]) -> None:
-        file_fields = page.locator("input[type='file']")
-        count = await file_fields.count()
-        for idx in range(count):
-            field = file_fields.nth(idx)
-            field_name = (await field.get_attribute("name") or "").lower()
-            target = docs.get("resume_pdf")
-            if "cover" in field_name:
-                target = docs.get("cover_letter_txt")
-            if target:
-                try:
-                    await field.set_input_files(target)
-                except Exception:
-                    continue
-
-    async def _submit_if_possible(self, page: Page) -> bool:
-        candidates = ["button:has-text('Submit')", "button:has-text('Apply')", "input[type='submit']"]
-        for selector in candidates:
-            try:
-                locator = page.locator(selector).first
-                if await locator.is_visible(timeout=400):
-                    await locator.click(timeout=1500)
-                    await asyncio.sleep(1.0)
-                    return True
-            except Exception:
-                continue
-        return False
-
-    async def _extract_confirmation(self, page: Page) -> str | None:
-        texts = [
-            "text=Thank you",
-            "text=Application submitted",
-            "text=We received your application",
-        ]
-        for selector in texts:
-            try:
-                locator = page.locator(selector).first
-                if await locator.is_visible(timeout=500):
-                    return await locator.text_content(timeout=500)
-            except Exception:
-                continue
-        return None
+    async def _random_delay(self, min_s: float, max_s: float) -> None:
+        await asyncio.sleep(random.uniform(min_s, max_s))
 
     def _randomized_user_agent(self) -> str:
         candidates = [

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import httpx
 from bs4 import BeautifulSoup
@@ -42,7 +42,7 @@ class WeWorkRemotelyConnector(JobConnector):
                     "location": location,
                     "url": url,
                     "description": item.description.text if item.description else "",
-                    "posted_at": datetime.now(UTC),
+                    "posted_at": datetime.now(timezone.utc),
                     "source_meta": {"raw_title": title_text},
                     "dedupe_hash": dedupe_hash,
                 }

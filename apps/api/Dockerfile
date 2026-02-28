@@ -4,6 +4,7 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app/apps/api/src:/app/packages/core/src
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential libpq-dev curl \

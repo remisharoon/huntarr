@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import httpx
 
@@ -41,7 +41,7 @@ class RemoteOkConnector(JobConnector):
                     "location": location,
                     "url": url,
                     "description": item.get("description") or "",
-                    "posted_at": datetime.now(UTC),
+                    "posted_at": datetime.now(timezone.utc),
                     "source_meta": item,
                     "dedupe_hash": dedupe_hash,
                 }

@@ -10,6 +10,26 @@ import asyncpg
 
 from huntarr_core.constants import DEFAULT_QUEUE_NAME
 
+_JSON_COLUMNS = {
+    "artifacts",
+    "details",
+    "education",
+    "explanation",
+    "meta",
+    "metadata",
+    "metrics",
+    "payload",
+    "payload_json",
+    "preferences",
+    "raw_json",
+    "rule_config",
+    "search_config",
+    "skills",
+    "state_json",
+    "value",
+    "experience",
+}
+
 
 def _json_default(value: Any) -> Any:
     if isinstance(value, UUID):
@@ -25,6 +45,28 @@ def _json_dumps(value: Any) -> str:
     return json.dumps(value, default=_json_default)
 
 
+def _normalize_json_value(value: Any) -> Any:
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return value
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return value
+    return value
+
+
+def _normalize_row(row: asyncpg.Record | dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(row)
+    for key in _JSON_COLUMNS:
+        if key in normalized:
+            normalized[key] = _normalize_json_value(normalized[key])
+    return normalized
+
+
 class HuntRepo:
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool
@@ -36,17 +78,17 @@ class HuntRepo:
         RETURNING *
         """
         row = await self.pool.fetchrow(query, mode, _json_dumps(search_config))
-        return dict(row) if row else {}
+        return _normalize_row(row) if row else {}
 
     async def fetch_run(self, run_id: UUID) -> dict[str, Any] | None:
         row = await self.pool.fetchrow("SELECT * FROM run_sessions WHERE id = $1", run_id)
-        return dict(row) if row else None
+        return _normalize_row(row) if row else None
 
     async def list_runs(self, limit: int = 50) -> list[dict[str, Any]]:
         rows = await self.pool.fetch(
             "SELECT * FROM run_sessions ORDER BY updated_at DESC LIMIT $1", limit
         )
-        return [dict(row) for row in rows]
+        return [_normalize_row(row) for row in rows]
 
     async def update_run_status(
         self,
@@ -117,7 +159,7 @@ class HuntRepo:
             message,
             _json_dumps(payload_json or {}),
         )
-        return dict(row) if row else {}
+        return _normalize_row(row) if row else {}
 
     async def fetch_run_events(
         self,
@@ -138,7 +180,7 @@ class HuntRepo:
             after_id,
             limit,
         )
-        return [dict(row) for row in rows]
+        return [_normalize_row(row) for row in rows]
 
     async def enqueue_job(
         self,
@@ -166,7 +208,7 @@ class HuntRepo:
             max_attempts,
             delay_seconds,
         )
-        return dict(row) if row else {}
+        return _normalize_row(row) if row else {}
 
     async def claim_next_job(
         self,
@@ -199,7 +241,7 @@ class HuntRepo:
                     queue_name,
                     worker_id,
                 )
-                return dict(row) if row else None
+                return _normalize_row(row) if row else None
 
     async def complete_job(self, job_id: int) -> None:
         await self.pool.execute(
@@ -297,7 +339,7 @@ class HuntRepo:
                 _json_dumps(payload.get("preferences", {})),
             )
             if row:
-                return dict(row)
+                return _normalize_row(row)
 
         row = await self.pool.fetchrow(
             """
@@ -326,13 +368,13 @@ class HuntRepo:
             _json_dumps(payload.get("education", [])),
             _json_dumps(payload.get("preferences", {})),
         )
-        return dict(row) if row else {}
+        return _normalize_row(row) if row else {}
 
     async def get_latest_profile(self) -> dict[str, Any] | None:
         row = await self.pool.fetchrow(
             "SELECT * FROM profiles ORDER BY updated_at DESC LIMIT 1"
         )
-        return dict(row) if row else None
+        return _normalize_row(row) if row else None
 
     async def upsert_search_preferences(
         self,
@@ -360,7 +402,7 @@ class HuntRepo:
             "SELECT * FROM search_preferences WHERE profile_id = $1",
             profile_id,
         )
-        return dict(row) if row else None
+        return _normalize_row(row) if row else None
 
     async def insert_credential(
         self,
@@ -391,7 +433,7 @@ class HuntRepo:
             ciphertext,
             _json_dumps(metadata or {}),
         )
-        return dict(row) if row else {}
+        return _normalize_row(row) if row else {}
 
     async def get_credential(
         self,
@@ -403,7 +445,7 @@ class HuntRepo:
             domain,
             username,
         )
-        return dict(row) if row else None
+        return _normalize_row(row) if row else None
 
     async def upsert_jobs(self, jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not jobs:
@@ -466,7 +508,7 @@ class HuntRepo:
                     )
                     if not row:
                         continue
-                    persisted_row = dict(row)
+                    persisted_row = _normalize_row(row)
                     persisted.append(persisted_row)
                     await conn.execute(
                         """
@@ -493,7 +535,7 @@ class HuntRepo:
             """,
             limit,
         )
-        return [dict(row) for row in rows]
+        return [_normalize_row(row) for row in rows]
 
     async def get_job(self, job_id: UUID) -> dict[str, Any] | None:
         row = await self.pool.fetchrow(
@@ -505,7 +547,7 @@ class HuntRepo:
             """,
             job_id,
         )
-        return dict(row) if row else None
+        return _normalize_row(row) if row else None
 
     async def upsert_scores(self, scores: list[dict[str, Any]]) -> None:
         async with self.pool.acquire() as conn:
@@ -570,7 +612,7 @@ class HuntRepo:
             confirmation_text,
             _json_dumps(artifacts or {}),
         )
-        return dict(row) if row else {}
+        return _normalize_row(row) if row else {}
 
     async def update_application(
         self,
@@ -609,7 +651,7 @@ class HuntRepo:
             """,
             limit,
         )
-        return [dict(row) for row in rows]
+        return [_normalize_row(row) for row in rows]
 
     async def insert_application_answers(
         self,
@@ -654,7 +696,7 @@ class HuntRepo:
             _json_dumps(details),
             session_url,
         )
-        return dict(row) if row else {}
+        return _normalize_row(row) if row else {}
 
     async def list_manual_actions(self, status: str | None = None) -> list[dict[str, Any]]:
         if status:
@@ -677,7 +719,7 @@ class HuntRepo:
                  ORDER BY ma.created_at DESC
                 """
             )
-        return [dict(row) for row in rows]
+        return [_normalize_row(row) for row in rows]
 
     async def resolve_manual_action(
         self,
@@ -699,7 +741,7 @@ class HuntRepo:
             status,
             _json_dumps(details) if details is not None else None,
         )
-        return dict(row) if row else None
+        return _normalize_row(row) if row else None
 
     async def create_generated_document(
         self,
@@ -721,14 +763,14 @@ class HuntRepo:
             path,
             _json_dumps(meta or {}),
         )
-        return dict(row) if row else {}
+        return _normalize_row(row) if row else {}
 
     async def list_generated_documents(self, run_id: UUID) -> list[dict[str, Any]]:
         rows = await self.pool.fetch(
             "SELECT * FROM generated_documents WHERE run_id = $1 ORDER BY created_at DESC",
             run_id,
         )
-        return [dict(row) for row in rows]
+        return [_normalize_row(row) for row in rows]
 
     async def create_schedule(
         self,
@@ -750,11 +792,11 @@ class HuntRepo:
             _json_dumps(payload),
             next_run_at,
         )
-        return dict(row) if row else {}
+        return _normalize_row(row) if row else {}
 
     async def list_schedules(self) -> list[dict[str, Any]]:
         rows = await self.pool.fetch("SELECT * FROM schedules ORDER BY created_at DESC")
-        return [dict(row) for row in rows]
+        return [_normalize_row(row) for row in rows]
 
     async def list_due_schedules(self) -> list[dict[str, Any]]:
         rows = await self.pool.fetch(
@@ -767,7 +809,7 @@ class HuntRepo:
              ORDER BY next_run_at ASC
             """
         )
-        return [dict(row) for row in rows]
+        return [_normalize_row(row) for row in rows]
 
     async def update_schedule_execution(
         self,
@@ -802,11 +844,11 @@ class HuntRepo:
             key,
             _json_dumps(value),
         )
-        return dict(row) if row else {}
+        return _normalize_row(row) if row else {}
 
     async def get_config(self, key: str) -> dict[str, Any] | None:
         row = await self.pool.fetchrow("SELECT * FROM configs WHERE key = $1", key)
-        return dict(row) if row else None
+        return _normalize_row(row) if row else None
 
     async def ensure_default_profile(self) -> dict[str, Any]:
         existing = await self.get_latest_profile()
@@ -856,7 +898,7 @@ class HuntRepo:
             """,
             run_id,
         )
-        return dict(row) if row else None
+        return _normalize_row(row) if row else None
 
     async def close_stale_in_progress_jobs(self, worker_id: str, stale_after_minutes: int = 30) -> int:
         status = await self.pool.execute(
@@ -890,14 +932,14 @@ class HuntRepo:
             "SELECT * FROM job_postings WHERE dedupe_hash = $1 LIMIT 1",
             dedupe_hash,
         )
-        return dict(row) if row else None
+        return _normalize_row(row) if row else None
 
     async def list_recent_events(self, limit: int = 100) -> list[dict[str, Any]]:
         rows = await self.pool.fetch(
             "SELECT * FROM run_events ORDER BY id DESC LIMIT $1",
             limit,
         )
-        return [dict(row) for row in rows]
+        return [_normalize_row(row) for row in rows]
 
     async def update_manual_action_session(
         self,
@@ -918,7 +960,7 @@ class HuntRepo:
             status,
             session_url,
         )
-        return dict(row) if row else None
+        return _normalize_row(row) if row else None
 
     async def pick_top_jobs_for_run(self, limit: int) -> list[dict[str, Any]]:
         rows = await self.pool.fetch(
@@ -931,7 +973,7 @@ class HuntRepo:
             """,
             limit,
         )
-        return [dict(r) for r in rows]
+        return [_normalize_row(r) for r in rows]
 
     async def get_run_state(self, run_id: UUID) -> dict[str, Any]:
         row = await self.pool.fetchrow(
@@ -940,7 +982,8 @@ class HuntRepo:
         )
         if not row or not row["state_json"]:
             return {}
-        return dict(row["state_json"])
+        state_json = _normalize_json_value(row["state_json"])
+        return state_json if isinstance(state_json, dict) else {}
 
     async def update_run_metrics(self, run_id: UUID, metrics: dict[str, Any]) -> None:
         await self.pool.execute(
@@ -968,7 +1011,7 @@ class HuntRepo:
                )
             """
         )
-        return [dict(row) for row in rows]
+        return [_normalize_row(row) for row in rows]
 
     async def set_run_search_config(self, run_id: UUID, search_config: dict[str, Any]) -> None:
         await self.pool.execute(
@@ -982,7 +1025,7 @@ class HuntRepo:
             "SELECT * FROM job_queue WHERE queue_name = $1 AND status = 'pending' ORDER BY available_at ASC",
             queue_name,
         )
-        return [dict(row) for row in rows]
+        return [_normalize_row(row) for row in rows]
 
     async def prune_old_events(self, older_than_days: int = 30) -> int:
         status = await self.pool.execute(
@@ -998,8 +1041,8 @@ class HuntRepo:
         rows = await self.pool.fetch(
             "SELECT * FROM manual_actions WHERE status IN ('pending', 'in_progress') ORDER BY created_at ASC"
         )
-        return [dict(row) for row in rows]
+        return [_normalize_row(row) for row in rows]
 
     async def heartbeat(self) -> dict[str, Any]:
         row = await self.pool.fetchrow("SELECT NOW() as now")
-        return dict(row) if row else {"now": datetime.now(timezone.utc)}
+        return _normalize_row(row) if row else {"now": datetime.now(timezone.utc)}

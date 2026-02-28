@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Workday Fixture</title>
+    <script>
+      function onNext() {
+        document.body.dataset.prefillNext = "clicked";
+        document.getElementById("wd-submit-step").style.display = "inline-block";
+      }
+      function onSubmitStep() {
+        document.body.dataset.submitStep = "clicked";
+        document.getElementById("wd-final-submit").style.display = "inline-block";
+      }
+      function onFinalSubmit() {
+        document.body.dataset.finalSubmit = "clicked";
+        document.getElementById("status").textContent = "Your application has been submitted";
+      }
+    </script>
+  </head>
+  <body>
+    <main>
+      <h1>Workday Apply</h1>
+      <label for="wd-first">First Name</label>
+      <input
+        id="wd-first"
+        data-automation-id="legalNameSection_firstName"
+        name="firstName"
+      />
+
+      <label for="wd-last">Last Name</label>
+      <input
+        id="wd-last"
+        data-automation-id="legalNameSection_lastName"
+        name="lastName"
+      />
+
+      <label for="wd-email">Email</label>
+      <input id="wd-email" data-automation-id="email" type="email" name="email" />
+
+      <label for="wd-phone">Phone</label>
+      <input id="wd-phone" data-automation-id="phone-number" type="tel" name="phone" />
+
+      <label for="wd-resume">Resume Upload</label>
+      <input id="wd-resume" type="file" data-automation-id="file-upload-resume" />
+
+      <label for="wd-cover">Cover Letter</label>
+      <textarea id="wd-cover" data-automation-id="coverLetterText"></textarea>
+
+      <button
+        id="wd-next"
+        type="button"
+        data-automation-id="bottom-navigation-next-button"
+        aria-label="Next"
+        onclick="onNext()"
+      >
+        Next
+      </button>
+
+      <button
+        id="wd-submit-step"
+        type="button"
+        data-automation-id="bottom-navigation-next-button"
+        aria-label="Submit Application"
+        style="display: none"
+        onclick="onSubmitStep()"
+      >
+        Review
+      </button>
+
+      <button id="wd-final-submit" type="button" style="display: none" onclick="onFinalSubmit()">
+        Submit
+      </button>
+
+      <p id="status"></p>
+    </main>
+  </body>
+</html>

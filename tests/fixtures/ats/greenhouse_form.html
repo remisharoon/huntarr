@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Greenhouse Fixture</title>
+  </head>
+  <body>
+    <main>
+      <h1>Apply</h1>
+      <form id="application-form">
+        <label for="first_name">First Name</label>
+        <input id="first_name" name="first_name" />
+
+        <label for="last_name">Last Name</label>
+        <input id="last_name" name="last_name" />
+
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" />
+
+        <label for="phone">Phone</label>
+        <input id="phone" name="phone" type="tel" />
+
+        <label for="address">Address</label>
+        <input id="address" name="address" />
+
+        <label for="cover_letter">Cover Letter</label>
+        <textarea id="cover_letter" name="cover_letter"></textarea>
+
+        <label for="resume_file">Resume</label>
+        <input id="resume_file" type="file" name="resume" />
+
+        <label for="cover_file">Cover Letter File</label>
+        <input id="cover_file" type="file" name="cover_letter" />
+
+        <button
+          id="submit_app"
+          type="button"
+          onclick="document.getElementById('status').textContent = 'Application submitted';"
+        >
+          Submit Application
+        </button>
+      </form>
+      <p id="status"></p>
+    </main>
+  </body>
+</html>

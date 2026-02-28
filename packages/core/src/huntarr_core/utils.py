@@ -4,12 +4,12 @@ import hashlib
 import random
 import re
 import time
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 
 def now_utc() -> datetime:
-    return datetime.now(UTC)
+    return datetime.now(timezone.utc)
 
 
 def normalize_text(value: str) -> str:

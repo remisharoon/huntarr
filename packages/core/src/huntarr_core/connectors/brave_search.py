@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import httpx
 
@@ -53,7 +53,7 @@ class BraveSearchConnector(JobConnector):
                     "location": location,
                     "url": url,
                     "description": description,
-                    "posted_at": datetime.now(UTC),
+                    "posted_at": datetime.now(timezone.utc),
                     "source_meta": item,
                     "dedupe_hash": dedupe_hash,
                 }

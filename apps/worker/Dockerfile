@@ -4,6 +4,7 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app/apps/worker/src:/app/packages/core/src
 
 COPY packages/core /app/packages/core
 COPY apps/worker/requirements.txt /app/apps/worker/requirements.txt
