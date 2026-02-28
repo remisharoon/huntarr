@@ -1,0 +1,1 @@
+"""Shared Huntarr core package."""

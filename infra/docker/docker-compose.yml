@@ -1,0 +1,110 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: huntarr-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-huntarr}
+      POSTGRES_USER: ${POSTGRES_USER:-huntarr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-huntarr}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-huntarr}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    container_name: huntarr-api
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://huntarr:huntarr@postgres:5432/huntarr}
+      ARTIFACT_ROOT: /data/artifacts
+      UPLOADS_ROOT: /data/uploads
+      VAULT_MASTER_PASSPHRASE: ${VAULT_MASTER_PASSPHRASE:-change-me}
+      PLAYWRIGHT_VNC_URL: ${PLAYWRIGHT_VNC_URL:-http://localhost:7900}
+      BRAVE_API_KEY: ${BRAVE_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    ports:
+      - "8000:8000"
+    volumes:
+      - artifacts_data:/data/artifacts
+      - browser_session_data:/data/browser
+      - uploads_data:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: apps/worker/Dockerfile
+    container_name: huntarr-worker
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://huntarr:huntarr@postgres:5432/huntarr}
+      ARTIFACT_ROOT: /data/artifacts
+      PLAYWRIGHT_VNC_URL: ${PLAYWRIGHT_VNC_URL:-http://playwright-vnc:7900}
+      BRAVE_API_KEY: ${BRAVE_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      WORKER_ID: worker-1
+      QUEUE_NAME: hunt
+      BROWSER_HEADLESS: ${BROWSER_HEADLESS:-true}
+      AUTO_SUBMIT_ENABLED: ${AUTO_SUBMIT_ENABLED:-true}
+    volumes:
+      - artifacts_data:/data/artifacts
+      - browser_session_data:/data/browser
+    depends_on:
+      postgres:
+        condition: service_healthy
+      playwright-vnc:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: apps/frontend/Dockerfile
+    container_name: huntarr-frontend
+    environment:
+      VITE_API_BASE: ${VITE_API_BASE:-http://localhost:8000}
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+  playwright-vnc:
+    image: selenium/standalone-chromium:latest
+    container_name: huntarr-playwright-vnc
+    shm_size: 2gb
+    ports:
+      - "7900:7900"
+      - "4444:4444"
+    environment:
+      SE_NODE_MAX_SESSIONS: 1
+      SE_VNC_NO_PASSWORD: 1
+      SE_START_VNC: 1
+
+  pgadmin:
+    image: dpage/pgadmin4:9
+    container_name: huntarr-pgadmin
+    profiles: ["dev"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@huntarr.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+  artifacts_data:
+  browser_session_data:
+  uploads_data:

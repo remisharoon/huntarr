@@ -1,0 +1,1 @@
+"""Huntarr worker service."""
