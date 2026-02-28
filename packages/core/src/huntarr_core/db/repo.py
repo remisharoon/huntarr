@@ -674,6 +674,146 @@ class HuntRepo:
                         answer.get("confidence"),
                     )
 
+    async def get_job_with_details(self, job_id: UUID) -> dict[str, Any] | None:
+        """Fetch job with all related applications, manual actions, and documents"""
+        job = await self.get_job(job_id)
+        if not job:
+            return None
+        
+        applications = await self.list_applications_for_job(job_id)
+        manual_actions = await self.list_manual_actions_for_job(job_id)
+        generated_documents = await self.list_generated_documents_for_job(job_id)
+        
+        return {
+            **job,
+            "applications": applications,
+            "manual_actions": manual_actions,
+            "generated_documents": generated_documents,
+        }
+
+    async def get_application_with_details(self, application_id: UUID) -> dict[str, Any] | None:
+        """Fetch application with job, answers, manual actions, and run details"""
+        rows = await self.pool.fetch(
+            """
+            SELECT a.*, j.title, j.company, j.location, j.url, j.description, 
+                   j.source, j.source_job_id, j.posted_at, j.dedupe_hash,
+                   s.score, s.explanation
+              FROM applications a
+              JOIN job_postings j ON j.id = a.job_id
+              LEFT JOIN job_scores s ON s.job_id = j.id
+             WHERE a.id = $1
+            """,
+            application_id,
+        )
+        if not rows:
+            return None
+        
+        app = _normalize_row(rows[0])
+        job_data = {
+            "id": app["job_id"],
+            "title": app["title"],
+            "company": app["company"],
+            "location": app.get("location"),
+            "url": app["url"],
+            "description": app.get("description"),
+            "source": app["source"],
+            "source_job_id": app["source_job_id"],
+            "posted_at": app.get("posted_at"),
+            "score": app.get("score"),
+            "explanation": app.get("explanation"),
+        }
+        
+        answers = await self.get_application_answers(application_id)
+        generated_documents = await self.list_generated_documents_for_job(app["job_id"])
+        manual_actions = await self.list_manual_actions_for_application(application_id)
+        run = await self.get_run_for_application(application_id)
+        
+        app["job"] = job_data
+        app["answers"] = answers
+        app["generated_documents"] = generated_documents
+        app["manual_actions"] = manual_actions
+        app["run"] = run
+        
+        return app
+
+    async def list_applications_for_job(self, job_id: UUID) -> list[dict[str, Any]]:
+        """Get compact applications list for a specific job"""
+        rows = await self.pool.fetch(
+            """
+            SELECT id, status, submitted_at, created_at, updated_at
+              FROM applications
+             WHERE job_id = $1
+             ORDER BY created_at DESC
+            """,
+            job_id,
+        )
+        return [_normalize_row(row) for row in rows]
+
+    async def list_manual_actions_for_job(self, job_id: UUID) -> list[dict[str, Any]]:
+        """Get all manual actions for a specific job"""
+        rows = await self.pool.fetch(
+            """
+            SELECT id, action_type, status, created_at, session_url
+              FROM manual_actions
+             WHERE job_id = $1
+             ORDER BY created_at DESC
+            """,
+            job_id,
+        )
+        return [_normalize_row(row) for row in rows]
+
+    async def list_generated_documents_for_job(self, job_id: UUID) -> list[dict[str, Any]]:
+        """Get all generated documents for a specific job"""
+        rows = await self.pool.fetch(
+            """
+            SELECT id, doc_type, path, created_at
+              FROM generated_documents
+             WHERE job_id = $1
+             ORDER BY created_at DESC
+            """,
+            job_id,
+        )
+        return [_normalize_row(row) for row in rows]
+
+    async def get_application_answers(self, application_id: UUID) -> list[dict[str, Any]]:
+        """Get all answers with confidence for a specific application"""
+        rows = await self.pool.fetch(
+            """
+            SELECT question, answer, confidence, created_at
+              FROM application_answers
+             WHERE application_id = $1
+             ORDER BY created_at ASC
+            """,
+            application_id,
+        )
+        return [_normalize_row(row) for row in rows]
+
+    async def list_manual_actions_for_application(self, application_id: UUID) -> list[dict[str, Any]]:
+        """Get all manual actions for a specific application"""
+        rows = await self.pool.fetch(
+            """
+            SELECT id, action_type, status, created_at, session_url
+              FROM manual_actions
+             WHERE application_id = $1
+             ORDER BY created_at DESC
+            """,
+            application_id,
+        )
+        return [_normalize_row(row) for row in rows]
+
+    async def get_run_for_application(self, application_id: UUID) -> dict[str, Any] | None:
+        """Get run details for an application"""
+        row = await self.pool.fetchrow(
+            """
+            SELECT rs.id, rs.status, rs.mode, rs.current_node
+              FROM run_sessions rs
+              JOIN applications a ON a.run_id = rs.id
+             WHERE a.id = $1
+            """,
+            application_id,
+        )
+        return _normalize_row(row) if row else None
+
     async def create_manual_action(
         self,
         run_id: UUID,

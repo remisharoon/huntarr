@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Briefcase, PlayCircle, ShieldAlert, UserRound, Workflow } from 'lucide-react'
+import { ArrowLeft, Briefcase, PlayCircle, ShieldAlert, UserRound, Workflow } from 'lucide-react'
 
 import { Button, Card } from './components/ui'
 import { api } from './lib/api'
+import { ApplicationDetailPage } from './pages/ApplicationDetailPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { JobDetailPage } from './pages/JobDetailPage'
 import { JobsPage } from './pages/JobsPage'
 import { ManualQueuePage } from './pages/ManualQueuePage'
 import { ProfilePage } from './pages/ProfilePage'
 import { RunsPage } from './pages/RunsPage'
 
-type View = 'dashboard' | 'jobs' | 'manual' | 'profile' | 'runs'
+type View = 'dashboard' | 'jobs' | 'manual' | 'profile' | 'runs' | 'job-detail' | 'application-detail'
 
 const tabs: Array<{ id: View; label: string; icon: any }> = [
   { id: 'dashboard', label: 'Dashboard', icon: Workflow },
@@ -28,6 +30,8 @@ export default function App() {
   const [profile, setProfile] = useState<any>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
+  const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null)
 
   const refresh = async () => {
     try {
@@ -82,6 +86,22 @@ export default function App() {
     await refresh()
   }
 
+  const onViewJob = (jobId: string) => {
+    setSelectedJobId(jobId)
+    setView('job-detail')
+  }
+
+  const onViewApplication = (applicationId: string) => {
+    setSelectedApplicationId(applicationId)
+    setView('application-detail')
+  }
+
+  const onBack = () => {
+    setSelectedJobId(null)
+    setSelectedApplicationId(null)
+    setView('jobs')
+  }
+
   return (
     <div className="mx-auto min-h-screen max-w-7xl px-4 py-6 md:px-8">
       <header className="mb-6 flex flex-col gap-4 rounded-3xl bg-ink p-6 text-white shadow-card md:flex-row md:items-center md:justify-between">
@@ -122,10 +142,16 @@ export default function App() {
       </nav>
 
       {view === 'dashboard' ? <DashboardPage runs={runs} jobs={jobs} manualActions={manualActions} applications={applications} /> : null}
-      {view === 'jobs' ? <JobsPage jobs={jobs} onApplyNow={onApplyNow} /> : null}
+      {view === 'jobs' ? <JobsPage jobs={jobs} onApplyNow={onApplyNow} onViewJob={onViewJob} /> : null}
       {view === 'manual' ? <ManualQueuePage actions={manualActions} onStart={onStartManual} onResolve={onResolveManual} /> : null}
       {view === 'profile' ? <ProfilePage profile={profile} onSave={async (payload) => { await api.saveProfile(payload); await refresh() }} /> : null}
       {view === 'runs' ? <RunsPage runs={runs} /> : null}
+      {view === 'job-detail' && selectedJobId ? (
+        <JobDetailPage jobId={selectedJobId} onBack={onBack} onViewApplication={onViewApplication} />
+      ) : null}
+      {view === 'application-detail' && selectedApplicationId ? (
+        <ApplicationDetailPage applicationId={selectedApplicationId} onBack={onBack} />
+      ) : null}
     </div>
   )
 }

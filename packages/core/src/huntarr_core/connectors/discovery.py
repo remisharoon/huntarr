@@ -5,7 +5,6 @@ import logging
 
 from huntarr_core.connectors.base import JobConnector
 from huntarr_core.connectors.brave_search import BraveSearchConnector
-from huntarr_core.connectors.policies import robots_allows
 from huntarr_core.connectors.remoteok import RemoteOkConnector
 from huntarr_core.connectors.weworkremotely import WeWorkRemotelyConnector
 from huntarr_core.types import SearchConfig
@@ -32,8 +31,6 @@ async def discover_jobs(config: SearchConfig) -> list[dict]:
         for job in response:
             url = job.get("url")
             if not url:
-                continue
-            if not robots_allows(url):
                 continue
             jobs.append(job)
 

@@ -1,0 +1,5 @@
+import { jsxs as _jsxs, jsx as _jsx } from "react/jsx-runtime";
+import { Button, Card } from '../components/ui';
+export function ManualQueuePage({ actions, onStart, onResolve, }) {
+    return (_jsx("div", { className: "space-y-3", children: actions.map((action) => (_jsx(Card, { children: _jsxs("div", { className: "flex flex-col gap-3 md:flex-row md:items-center md:justify-between", children: [_jsxs("div", { children: [_jsxs("p", { className: "font-display text-lg", children: [action.company, " \u2014 ", action.title] }), _jsxs("p", { className: "text-sm text-muted", children: [action.action_type, " \u2022 ", action.status] }), action.session_url ? (_jsx("a", { className: "text-sm text-accent", href: action.session_url, target: "_blank", rel: "noreferrer", children: "Open noVNC session" })) : null] }), _jsxs("div", { className: "flex gap-2", children: [_jsx(Button, { variant: "secondary", onClick: () => onStart(action.id), children: "Start Session" }), _jsx(Button, { onClick: () => onResolve(action.id), children: "Resolve + Resume" })] })] }) }, action.id))) }));
+}

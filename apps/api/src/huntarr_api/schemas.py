@@ -69,3 +69,54 @@ class HealthResponse(BaseModel):
 
 class GenericListResponse(BaseModel):
     items: list[dict[str, Any]]
+
+
+class JobDetailResponse(BaseModel):
+    id: UUID
+    source: str
+    source_job_id: str
+    title: str
+    company: str
+    location: str | None
+    url: str
+    description: str
+    posted_at: datetime | None
+    dedupe_hash: str
+    raw_json: dict[str, Any]
+    score: float | None
+    explanation: dict[str, Any] | None
+    applications: list[dict[str, Any]]
+    manual_actions: list[dict[str, Any]]
+    generated_documents: list[dict[str, Any]]
+    created_at: datetime
+    updated_at: datetime
+
+
+class ApplicationDetailResponse(BaseModel):
+    id: UUID
+    run_id: UUID
+    job_id: UUID
+    status: str
+    source_portal: str | None
+    error_code: str | None
+    confirmation_text: str | None
+    artifacts: dict[str, Any]
+    submitted_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    title: str
+    company: str
+    location: str | None
+    url: str
+    description: str | None
+    source: str
+    source_job_id: str
+    posted_at: datetime | None
+    dedupe_hash: str
+    score: float | None
+    explanation: dict[str, Any] | None
+    job: dict[str, Any]
+    answers: list[dict[str, Any]]
+    generated_documents: list[dict[str, Any]]
+    manual_actions: list[dict[str, Any]]
+    run: dict[str, Any] | None

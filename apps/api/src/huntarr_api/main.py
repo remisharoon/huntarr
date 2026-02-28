@@ -16,9 +16,11 @@ from sse_starlette.sse import EventSourceResponse
 
 from huntarr_api.config import settings
 from huntarr_api.schemas import (
+    ApplicationDetailResponse,
     ConfigPayload,
     CredentialPayload,
     HealthResponse,
+    JobDetailResponse,
     ManualActionResolveRequest,
     ManualSessionStartResponse,
     ProfilePayload,
@@ -176,9 +178,9 @@ async def list_jobs(limit: int = Query(default=200, ge=1, le=500)) -> dict[str, 
     return {'items': jobs}
 
 
-@app.get('/api/jobs/{job_id}')
+@app.get('/api/jobs/{job_id}', response_model=JobDetailResponse)
 async def get_job(job_id: UUID) -> dict[str, Any]:
-    job = await get_repo().get_job(job_id)
+    job = await get_repo().get_job_with_details(job_id)
     if not job:
         raise HTTPException(status_code=404, detail='Job not found')
     return job
@@ -207,6 +209,14 @@ async def apply_now(job_id: UUID) -> dict[str, Any]:
 async def list_applications(limit: int = Query(default=200, ge=1, le=500)) -> dict[str, Any]:
     apps = await get_repo().list_applications(limit=limit)
     return {'items': apps}
+
+
+@app.get('/api/applications/{application_id}', response_model=ApplicationDetailResponse)
+async def get_application(application_id: UUID) -> dict[str, Any]:
+    app = await get_repo().get_application_with_details(application_id)
+    if not app:
+        raise HTTPException(status_code=404, detail='Application not found')
+    return app
 
 
 @app.get('/api/manual-actions')

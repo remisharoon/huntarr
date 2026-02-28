@@ -1,8 +1,8 @@
 import { ReactNode } from 'react'
 import { cn } from '../lib/utils'
 
-export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('rounded-2xl border border-black/5 bg-white/80 p-4 shadow-card backdrop-blur', className)}>{children}</div>
+export function Card({ className, children, onClick }: { className?: string; children: ReactNode; onClick?: () => void }) {
+  return <div className={cn('rounded-2xl border border-black/5 bg-white/80 p-4 shadow-card backdrop-blur', className)} onClick={onClick}>{children}</div>
 }
 
 export function Button({
@@ -15,7 +15,7 @@ export function Button({
 }: {
   className?: string
   children: ReactNode
-  onClick?: () => void
+  onClick?: (e?: React.MouseEvent) => void
   disabled?: boolean
   variant?: 'primary' | 'secondary' | 'ghost'
   type?: 'button' | 'submit'
