@@ -6,7 +6,7 @@ robots: index, follow
 og:title: User Guide - Huntarr
 og:description: Complete guide to using Huntarr for automated job hunting.
 og:type: website
-og:url: https://huntarr.github.io/huntarr/USER_GUIDE/
+og:url: https://remisharoon.github.io/huntarr/USER_GUIDE/
 twitter:card: summary
 twitter:title: User Guide - Huntarr
 twitter:description: Complete guide to using Huntarr for automated job hunting.

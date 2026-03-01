@@ -6,12 +6,12 @@ robots: index, follow
 og:title: Huntarr - Automated Job Research & Application Agent
 og:description: Set it loose, let it hunt. Automated job discovery, intelligent ranking, and automated applications.
 og:type: website
-og:url: https://huntarr.github.io/huntarr/
-og:image: https://huntarr.github.io/huntarr/assets/social-card.png
+og:url: https://remisharoon.github.io/huntarr/
+og:image: https://remisharoon.github.io/huntarr/assets/social-card.png
 twitter:card: summary_large_image
 twitter:title: Huntarr - Automated Job Research & Application Agent
 twitter:description: Automated job discovery, intelligent ranking, and automated applications.
-twitter:image: https://huntarr.github.io/huntarr/assets/social-card.png
+twitter:image: https://remisharoon.github.io/huntarr/assets/social-card.png
 ---
 
 # Huntarr Documentation

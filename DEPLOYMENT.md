@@ -41,7 +41,7 @@ The workflow will automatically:
 
 After successful deployment, your documentation will be available at:
 ```
-https://[YOUR_USERNAME].github.io/huntarr/
+https://remisharoon.github.io/huntarr/
 ```
 
 ## Troubleshooting

@@ -6,7 +6,7 @@ robots: index, follow
 og:title: Developer Guide - Huntarr
 og:description: Guide for contributing to and extending Huntarr.
 og:type: website
-og:url: https://huntarr.github.io/huntarr/DEVELOPER_GUIDE/
+og:url: https://remisharoon.github.io/huntarr/DEVELOPER_GUIDE/
 twitter:card: summary
 twitter:title: Developer Guide - Huntarr
 twitter:description: Guide for contributing to and extending Huntarr.

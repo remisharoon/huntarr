@@ -6,7 +6,7 @@ robots: index, follow
 og:title: Architecture - Huntarr
 og:description: System architecture and design of Huntarr.
 og:type: website
-og:url: https://huntarr.github.io/huntarr/ARCHITECTURE/
+og:url: https://remisharoon.github.io/huntarr/ARCHITECTURE/
 twitter:card: summary
 twitter:title: Architecture - Huntarr
 twitter:description: System architecture and design of Huntarr.

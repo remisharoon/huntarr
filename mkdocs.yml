@@ -1,8 +1,8 @@
 site_name: Huntarr Documentation
 site_description: Automated job research & application agent - set it loose, let it hunt. Complete documentation for Huntarr.
-site_author: Huntarr
-repo_name: huntarr/huntarr
-repo_url: https://github.com/huntarr/huntarr
+site_author: Remisharoon
+repo_name: remisharoon/huntarr
+repo_url: https://github.com/remisharoon/huntarr
 
 # Copyright
 copyright: Copyright &copy; 2026
@@ -119,7 +119,7 @@ extra:
           data: 0
           note: >-
             Thanks for your feedback! Help us improve this page by
-            <a href="https://github.com/huntarr/huntarr/issues" target="_blank" rel="noopener">opening an issue</a>.
+            <a href="https://github.com/remisharoon/huntarr/issues" target="_blank" rel="noopener">opening an issue</a>.
 
 # Social cards for Open Graph
 extra_css:

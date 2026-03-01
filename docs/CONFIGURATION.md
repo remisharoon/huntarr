@@ -6,7 +6,7 @@ robots: index, follow
 og:title: Configuration - Huntarr
 og:description: Complete reference for configuring Huntarr.
 og:type: website
-og:url: https://huntarr.github.io/huntarr/CONFIGURATION/
+og:url: https://remisharoon.github.io/huntarr/CONFIGURATION/
 twitter:card: summary
 twitter:title: Configuration - Huntarr
 twitter:description: Complete reference for configuring Huntarr.

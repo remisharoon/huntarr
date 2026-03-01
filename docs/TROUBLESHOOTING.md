@@ -6,7 +6,7 @@ robots: index, follow
 og:title: Troubleshooting - Huntarr
 og:description: Common issues and solutions for Huntarr.
 og:type: website
-og:url: https://huntarr.github.io/huntarr/TROUBLESHOOTING/
+og:url: https://remisharoon.github.io/huntarr/TROUBLESHOOTING/
 twitter:card: summary
 twitter:title: Troubleshooting - Huntarr
 twitter:description: Common issues and solutions for Huntarr.
