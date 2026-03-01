@@ -10,9 +10,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential libpq-dev curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY packages/core /app/packages/core
 COPY apps/api/requirements.txt /app/apps/api/requirements.txt
-RUN pip install --no-cache-dir -e /app/packages/core && pip install --no-cache-dir -r /app/apps/api/requirements.txt
+RUN pip install --no-cache-dir -r /app/apps/api/requirements.txt
+
+COPY packages/core /app/packages/core
+RUN pip install --no-cache-dir -e /app/packages/core
 
 COPY apps/api/src /app/apps/api/src
 

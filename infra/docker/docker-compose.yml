@@ -20,6 +20,10 @@ services:
     build:
       context: ../..
       dockerfile: apps/api/Dockerfile
+      cache_from:
+        - huntarr-api:latest
+    image: huntarr-api:latest
+    pull_policy: build
     container_name: huntarr-api
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://huntarr:huntarr@postgres:5432/huntarr}
@@ -45,6 +49,10 @@ services:
     build:
       context: ../..
       dockerfile: apps/worker/Dockerfile
+      cache_from:
+        - huntarr-worker:latest
+    image: huntarr-worker:latest
+    pull_policy: build
     container_name: huntarr-worker
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://huntarr:huntarr@postgres:5432/huntarr}
@@ -71,6 +79,10 @@ services:
     build:
       context: ../..
       dockerfile: apps/frontend/Dockerfile
+      cache_from:
+        - huntarr-frontend:latest
+    image: huntarr-frontend:latest
+    pull_policy: build
     container_name: huntarr-frontend
     environment:
       VITE_API_BASE: ${VITE_API_BASE:-http://localhost:8000}

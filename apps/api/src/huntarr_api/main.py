@@ -30,7 +30,7 @@ from huntarr_api.schemas import (
 from huntarr_core.constants import DEFAULT_QUEUE_NAME
 from huntarr_core.db.pool import create_db_pool, init_db_schema
 from huntarr_core.db.repo import HuntRepo
-from huntarr_core.vault import encrypt_secret
+from huntarr_core.vault import decrypt_secret, encrypt_secret
 
 app = FastAPI(title='Huntarr API', version='0.1.0')
 
@@ -354,6 +354,45 @@ async def store_credential(payload: CredentialPayload) -> dict[str, Any]:
     return saved
 
 
+@app.get('/api/credentials')
+async def list_credentials() -> dict[str, Any]:
+    credentials = await get_repo().list_credentials()
+    items = []
+    for cred in credentials:
+        items.append({
+            'domain': cred['domain'],
+            'username': cred['username'],
+            'metadata': cred.get('metadata', {}),
+            'created_at': cred.get('created_at'),
+        })
+    return {'items': items}
+
+
+@app.get('/api/credentials/{domain}/{username}')
+async def get_credential(domain: str, username: str) -> dict[str, Any]:
+    cred = await get_repo().get_credential(domain, username)
+    if not cred:
+        raise HTTPException(status_code=404, detail='Credential not found')
+    decrypted = decrypt_secret(
+        settings.vault_master_passphrase,
+        cred['salt'],
+        cred['nonce'],
+        cred['ciphertext'],
+    )
+    return {
+        'domain': cred['domain'],
+        'username': cred['username'],
+        'metadata': cred.get('metadata', {}),
+        'password': decrypted.get('password', ''),
+    }
+
+
+@app.delete('/api/credentials/{domain}/{username}')
+async def delete_credential(domain: str, username: str) -> dict[str, Any]:
+    await get_repo().delete_credential(domain, username)
+    return {'success': True}
+
+
 @app.post('/api/schedules')
 async def create_schedule(payload: ScheduleCreateRequest) -> dict[str, Any]:
     now = datetime.utcnow()
@@ -373,3 +412,9 @@ async def create_schedule(payload: ScheduleCreateRequest) -> dict[str, Any]:
 async def list_schedules() -> dict[str, Any]:
     schedules = await get_repo().list_schedules()
     return {'items': schedules}
+
+
+@app.delete('/api/schedules/{id}')
+async def delete_schedule(id: str) -> dict[str, Any]:
+    await get_repo().delete_schedule(UUID(id))
+    return {'success': True}

@@ -43,6 +43,13 @@ export const api = {
   listSchedules: () => request<{ items: any[] }>('/api/schedules'),
   createSchedule: (body: Record<string, unknown>) =>
     request('/api/schedules', { method: 'POST', body: JSON.stringify(body) }),
+  deleteSchedule: (id: string) =>
+    request(`/api/schedules/${id}`, { method: 'DELETE' }),
+  listCredentials: () => request<{ items: any[] }>('/api/credentials'),
+  getCredential: (domain: string, username: string) =>
+    request(`/api/credentials/${domain}/${username}`),
+  deleteCredential: (domain: string, username: string) =>
+    request(`/api/credentials/${domain}/${username}`, { method: 'DELETE' }),
   storeCredential: (body: Record<string, unknown>) =>
     request('/api/credentials', { method: 'POST', body: JSON.stringify(body) }),
 }

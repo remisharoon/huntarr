@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Briefcase, PlayCircle, ShieldAlert, UserRound, Workflow } from 'lucide-react'
+import { ArrowLeft, Briefcase, PlayCircle, Settings, ShieldAlert, UserRound, Workflow } from 'lucide-react'
 
 import { Button, Card } from './components/ui'
 import { api } from './lib/api'
@@ -10,8 +10,9 @@ import { JobsPage } from './pages/JobsPage'
 import { ManualQueuePage } from './pages/ManualQueuePage'
 import { ProfilePage } from './pages/ProfilePage'
 import { RunsPage } from './pages/RunsPage'
+import { SettingsPage } from './pages/SettingsPage'
 
-type View = 'dashboard' | 'jobs' | 'manual' | 'profile' | 'runs' | 'job-detail' | 'application-detail'
+type View = 'dashboard' | 'jobs' | 'manual' | 'profile' | 'runs' | 'settings' | 'job-detail' | 'application-detail'
 
 const tabs: Array<{ id: View; label: string; icon: any }> = [
   { id: 'dashboard', label: 'Dashboard', icon: Workflow },
@@ -19,6 +20,7 @@ const tabs: Array<{ id: View; label: string; icon: any }> = [
   { id: 'manual', label: 'Manual Queue', icon: ShieldAlert },
   { id: 'profile', label: 'Profile', icon: UserRound },
   { id: 'runs', label: 'Runs', icon: PlayCircle },
+  { id: 'settings', label: 'Settings', icon: Settings },
 ]
 
 export default function App() {
@@ -146,6 +148,7 @@ export default function App() {
       {view === 'manual' ? <ManualQueuePage actions={manualActions} onStart={onStartManual} onResolve={onResolveManual} /> : null}
       {view === 'profile' ? <ProfilePage profile={profile} onSave={async (payload) => { await api.saveProfile(payload); await refresh() }} /> : null}
       {view === 'runs' ? <RunsPage runs={runs} /> : null}
+      {view === 'settings' ? <SettingsPage /> : null}
       {view === 'job-detail' && selectedJobId ? (
         <JobDetailPage jobId={selectedJobId} onBack={onBack} onViewApplication={onViewApplication} />
       ) : null}

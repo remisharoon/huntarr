@@ -447,6 +447,19 @@ class HuntRepo:
         )
         return _normalize_row(row) if row else None
 
+    async def list_credentials(self) -> list[dict[str, Any]]:
+        rows = await self.pool.fetch(
+            "SELECT domain, username, metadata, created_at FROM credentials_vault ORDER BY created_at DESC",
+        )
+        return [_normalize_row(row) for row in rows]
+
+    async def delete_credential(self, domain: str, username: str) -> None:
+        await self.pool.execute(
+            "DELETE FROM credentials_vault WHERE domain = $1 AND username = $2",
+            domain,
+            username,
+        )
+
     async def upsert_jobs(self, jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not jobs:
             return []
@@ -937,6 +950,9 @@ class HuntRepo:
     async def list_schedules(self) -> list[dict[str, Any]]:
         rows = await self.pool.fetch("SELECT * FROM schedules ORDER BY created_at DESC")
         return [_normalize_row(row) for row in rows]
+
+    async def delete_schedule(self, id: UUID) -> None:
+        await self.pool.execute("DELETE FROM schedules WHERE id = $1", id)
 
     async def list_due_schedules(self) -> list[dict[str, Any]]:
         rows = await self.pool.fetch(

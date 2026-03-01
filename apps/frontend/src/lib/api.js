@@ -36,6 +36,10 @@ export const api = {
     putConfig: (value) => request('/api/config', { method: 'PUT', body: JSON.stringify({ value }) }),
     listSchedules: () => request('/api/schedules'),
     createSchedule: (body) => request('/api/schedules', { method: 'POST', body: JSON.stringify(body) }),
+    deleteSchedule: (id) => request(`/api/schedules/${id}`, { method: 'DELETE' }),
+    listCredentials: () => request('/api/credentials'),
+    getCredential: (domain, username) => request(`/api/credentials/${domain}/${username}`),
+    deleteCredential: (domain, username) => request(`/api/credentials/${domain}/${username}`, { method: 'DELETE' }),
     storeCredential: (body) => request('/api/credentials', { method: 'POST', body: JSON.stringify(body) }),
 };
 export function eventsUrl(runId) {
