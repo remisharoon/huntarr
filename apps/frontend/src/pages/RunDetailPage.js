@@ -117,7 +117,7 @@ function SearchConfigItem({ label, value }) {
     return (_jsxs("div", { className: "flex", children: [_jsxs("span", { className: "font-semibold w-40 text-muted", children: [label, ":"] }), _jsx("span", { children: displayValue })] }));
 }
 function ApplicationCard({ application }) {
-    return (_jsxs("div", { className: "p-3 border rounded hover:bg-surface cursor-pointer", children: [_jsx("p", { className: "font-semibold", children: application.job.title }), _jsx("p", { className: "text-sm text-muted", children: application.job.company }), _jsx("span", { className: `text-xs px-2 py-1 rounded ${getStatusColor(application.status)}`, children: application.status })] }));
+    return (_jsxs("div", { className: "p-3 border rounded hover:bg-surface cursor-pointer", children: [_jsx("p", { className: "font-semibold", children: application.job?.title || 'Unknown Job' }), _jsx("p", { className: "text-sm text-muted", children: application.job?.company || 'Unknown Company' }), _jsx("span", { className: `text-xs px-2 py-1 rounded ${getStatusColor(application.status)}`, children: application.status })] }));
 }
 function ManualActionCard({ action }) {
     return (_jsxs("div", { className: "p-3 border rounded", children: [_jsxs("div", { className: "flex justify-between", children: [_jsx("span", { className: "font-semibold", children: action.action_type }), _jsx("span", { className: `text-xs px-2 py-1 rounded ${getStatusColor(action.status)}`, children: action.status })] }), _jsx("p", { className: "text-xs text-muted mt-1", children: new Date(action.created_at).toLocaleString() })] }));

@@ -310,8 +310,8 @@ function SearchConfigItem({ label, value }: { label: string; value: any }) {
 function ApplicationCard({ application }: { application: Application }) {
   return (
     <div className="p-3 border rounded hover:bg-surface cursor-pointer">
-      <p className="font-semibold">{application.job.title}</p>
-      <p className="text-sm text-muted">{application.job.company}</p>
+      <p className="font-semibold">{application.job?.title || 'Unknown Job'}</p>
+      <p className="text-sm text-muted">{application.job?.company || 'Unknown Company'}</p>
       <span className={`text-xs px-2 py-1 rounded ${getStatusColor(application.status)}`}>
         {application.status}
       </span>
