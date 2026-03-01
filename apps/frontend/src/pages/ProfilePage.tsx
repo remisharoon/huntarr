@@ -9,8 +9,11 @@ export function ProfilePage({ profile, onSave }: { profile: any; onSave: (payloa
   const [resumeFileName, setResumeFileName] = useState('')
   const [resumeError, setResumeError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Prevents background profile refresh from overwriting form after a PDF import
+  const hasImportedRef = useRef(false)
 
   useEffect(() => {
+    if (hasImportedRef.current) return
     setForm(profile ?? {})
   }, [profile])
 
@@ -31,6 +34,8 @@ export function ProfilePage({ profile, onSave }: { profile: any; onSave: (payloa
     setResumeError('')
     try {
       const extracted = await api.importResume(file)
+      // Block the profile-prop useEffect from overwriting these values
+      hasImportedRef.current = true
       setForm((prev: any) => ({ ...prev, ...extracted }))
       setResumeStatus('done')
     } catch (err: any) {
@@ -50,6 +55,8 @@ export function ProfilePage({ profile, onSave }: { profile: any; onSave: (payloa
           .map((item) => item.trim())
           .filter(Boolean),
       })
+      // After a successful save the parent refreshes profile — allow it to sync
+      hasImportedRef.current = false
     } finally {
       setSaving(false)
     }

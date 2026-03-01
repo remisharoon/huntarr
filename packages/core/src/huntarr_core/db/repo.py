@@ -540,9 +540,14 @@ class HuntRepo:
     async def list_jobs(self, limit: int = 200) -> list[dict[str, Any]]:
         rows = await self.pool.fetch(
             """
+            WITH best_scores AS (
+                SELECT DISTINCT ON (job_id) job_id, score, explanation
+                  FROM job_scores
+                 ORDER BY job_id, score DESC
+            )
             SELECT j.*, s.score, s.explanation
               FROM job_postings j
-              LEFT JOIN job_scores s ON s.job_id = j.id
+              LEFT JOIN best_scores s ON s.job_id = j.id
              ORDER BY COALESCE(s.score, 0) DESC, j.updated_at DESC
              LIMIT $1
             """,
