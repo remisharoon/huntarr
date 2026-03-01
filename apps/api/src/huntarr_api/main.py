@@ -15,12 +15,26 @@ from pypdf import PdfReader
 from sse_starlette.sse import EventSourceResponse
 
 from huntarr_api.config import settings
+from huntarr_api.llm_providers import (
+    LLM_PROVIDER_VAULT_DOMAIN,
+    activate_provider,
+    create_provider,
+    delete_provider as delete_llm_provider,
+    get_provider,
+    list_provider_summaries,
+    resolve_active_runtime_config,
+    resolve_provider_api_key,
+    update_provider,
+)
 from huntarr_api.schemas import (
     ApplicationDetailResponse,
     ConfigPayload,
     CredentialPayload,
     HealthResponse,
     JobDetailResponse,
+    LLMProviderCreatePayload,
+    LLMProviderTestPayload,
+    LLMProviderUpdatePayload,
     ManualActionResolveRequest,
     ManualSessionStartResponse,
     ProfilePayload,
@@ -351,16 +365,17 @@ async def import_resume(file: UploadFile = File(...)) -> dict[str, Any]:
     reader = PdfReader(str(file_path))
     raw_text = '\n'.join(page.extract_text() or '' for page in reader.pages)
 
-    # AI extraction — falls back to rule-based if no API key
-    if settings.openai_api_key:
+    # AI extraction — falls back to rule-based if no provider key is available
+    llm_runtime = await resolve_active_runtime_config(get_repo())
+    if llm_runtime and llm_runtime.get('api_key'):
         try:
             import json as _json
 
             from openai import AsyncOpenAI
 
             client = AsyncOpenAI(
-                api_key=settings.openai_api_key,
-                base_url=settings.openai_base_url,
+                api_key=llm_runtime['api_key'],
+                base_url=llm_runtime['base_url'],
             )
             prompt = (
                 'You are a resume parser. Extract structured data from the resume text below.\n'
@@ -380,7 +395,7 @@ async def import_resume(file: UploadFile = File(...)) -> dict[str, Any]:
                 f'Resume text:\n{raw_text[:8000]}'
             )
             response = await client.chat.completions.create(
-                model=settings.openai_model,
+                model=llm_runtime['model'],
                 messages=[{'role': 'user', 'content': prompt}],
                 temperature=0,
             )
@@ -425,8 +440,105 @@ async def set_config(key: str = Query(default='default'), payload: ConfigPayload
     return updated
 
 
+@app.get('/api/llm/providers')
+async def get_llm_providers() -> dict[str, Any]:
+    return await list_provider_summaries(get_repo())
+
+
+@app.post('/api/llm/providers')
+async def create_llm_provider(payload: LLMProviderCreatePayload) -> dict[str, Any]:
+    try:
+        return await create_provider(
+            get_repo(),
+            name=payload.name,
+            base_url=payload.base_url,
+            model=payload.model,
+            api_key=payload.api_key,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put('/api/llm/providers/{provider_id}')
+async def edit_llm_provider(provider_id: str, payload: LLMProviderUpdatePayload) -> dict[str, Any]:
+    try:
+        return await update_provider(
+            get_repo(),
+            provider_id,
+            name=payload.name,
+            base_url=payload.base_url,
+            model=payload.model,
+            api_key=payload.api_key,
+            clear_api_key=payload.clear_api_key,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail='Provider not found') from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post('/api/llm/providers/{provider_id}/activate')
+async def set_active_llm_provider(provider_id: str) -> dict[str, Any]:
+    try:
+        return await activate_provider(get_repo(), provider_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail='Provider not found') from exc
+
+
+@app.delete('/api/llm/providers/{provider_id}')
+async def remove_llm_provider(provider_id: str) -> dict[str, Any]:
+    try:
+        return await delete_llm_provider(get_repo(), provider_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail='Provider not found') from exc
+
+
+@app.post('/api/llm/providers/test')
+async def test_llm_provider(payload: LLMProviderTestPayload) -> dict[str, Any]:
+    from openai import AsyncOpenAI
+
+    repository = get_repo()
+    selected_provider: dict[str, Any] | None = None
+    if payload.provider_id:
+        selected_provider = await get_provider(repository, payload.provider_id)
+        if selected_provider is None:
+            raise HTTPException(status_code=404, detail='Provider not found')
+
+    base_url = (payload.base_url or (selected_provider['base_url'] if selected_provider else '')).strip().rstrip('/')
+    model = (payload.model or (selected_provider['model'] if selected_provider else '')).strip()
+    if not base_url or not model:
+        raise HTTPException(status_code=400, detail='base_url and model are required for provider test')
+
+    api_key = (payload.api_key or '').strip()
+    key_source = 'payload'
+    if not api_key and selected_provider:
+        api_key, key_source = await resolve_provider_api_key(repository, selected_provider)
+    if not api_key:
+        raise HTTPException(status_code=400, detail='No API key configured for this provider')
+
+    try:
+        client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        await client.chat.completions.create(
+            model=model,
+            messages=[{'role': 'user', 'content': 'Return only the text: ok'}],
+            temperature=0,
+            max_tokens=8,
+        )
+        return {
+            'ok': True,
+            'message': 'Provider test succeeded',
+            'base_url': base_url,
+            'model': model,
+            'key_source': key_source,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f'Provider test failed: {exc}') from exc
+
+
 @app.post('/api/credentials')
 async def store_credential(payload: CredentialPayload) -> dict[str, Any]:
+    if payload.domain == LLM_PROVIDER_VAULT_DOMAIN:
+        raise HTTPException(status_code=400, detail='Reserved domain for internal LLM provider secrets')
     salt, nonce, ciphertext = encrypt_secret(
         settings.vault_master_passphrase,
         {'password': payload.password},
@@ -447,6 +559,8 @@ async def list_credentials() -> dict[str, Any]:
     credentials = await get_repo().list_credentials()
     items = []
     for cred in credentials:
+        if cred['domain'] == LLM_PROVIDER_VAULT_DOMAIN:
+            continue
         items.append({
             'domain': cred['domain'],
             'username': cred['username'],
@@ -458,6 +572,8 @@ async def list_credentials() -> dict[str, Any]:
 
 @app.get('/api/credentials/{domain}/{username}')
 async def get_credential(domain: str, username: str) -> dict[str, Any]:
+    if domain == LLM_PROVIDER_VAULT_DOMAIN:
+        raise HTTPException(status_code=404, detail='Credential not found')
     cred = await get_repo().get_credential(domain, username)
     if not cred:
         raise HTTPException(status_code=404, detail='Credential not found')
@@ -477,6 +593,8 @@ async def get_credential(domain: str, username: str) -> dict[str, Any]:
 
 @app.delete('/api/credentials/{domain}/{username}')
 async def delete_credential(domain: str, username: str) -> dict[str, Any]:
+    if domain == LLM_PROVIDER_VAULT_DOMAIN:
+        raise HTTPException(status_code=404, detail='Credential not found')
     await get_repo().delete_credential(domain, username)
     return {'success': True}
 

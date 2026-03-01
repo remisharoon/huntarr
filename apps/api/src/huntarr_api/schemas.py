@@ -44,6 +44,28 @@ class ConfigPayload(BaseModel):
     value: dict[str, Any] = Field(default_factory=dict)
 
 
+class LLMProviderCreatePayload(BaseModel):
+    name: str
+    base_url: str
+    model: str
+    api_key: str | None = None
+
+
+class LLMProviderUpdatePayload(BaseModel):
+    name: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+    api_key: str | None = None
+    clear_api_key: bool = False
+
+
+class LLMProviderTestPayload(BaseModel):
+    provider_id: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+    api_key: str | None = None
+
+
 class ScheduleCreateRequest(BaseModel):
     name: str
     cron_expr: str

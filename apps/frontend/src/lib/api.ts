@@ -2,6 +2,22 @@ import type { Application, ManualAction, Run, RunEvent } from '../types'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
 
+export type LLMProviderSummary = {
+  id: string
+  name: string
+  base_url: string
+  model: string
+  has_api_key: boolean
+  key_source: 'none' | 'env' | 'vault' | string
+  is_active: boolean
+  updated_at: string
+}
+
+export type LLMProviderListResponse = {
+  active_provider_id: string | null
+  items: LLMProviderSummary[]
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
@@ -53,6 +69,17 @@ export const api = {
   getConfig: () => request('/api/config'),
   putConfig: (value: Record<string, unknown>) =>
     request('/api/config', { method: 'PUT', body: JSON.stringify({ value }) }),
+  listLLMProviders: () => request<LLMProviderListResponse>('/api/llm/providers'),
+  createLLMProvider: (body: Record<string, unknown>) =>
+    request('/api/llm/providers', { method: 'POST', body: JSON.stringify(body) }),
+  updateLLMProvider: (id: string, body: Record<string, unknown>) =>
+    request(`/api/llm/providers/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  activateLLMProvider: (id: string) =>
+    request(`/api/llm/providers/${id}/activate`, { method: 'POST' }),
+  deleteLLMProvider: (id: string) =>
+    request(`/api/llm/providers/${id}`, { method: 'DELETE' }),
+  testLLMProvider: (body: Record<string, unknown>) =>
+    request('/api/llm/providers/test', { method: 'POST', body: JSON.stringify(body) }),
   listSchedules: () => request<{ items: any[] }>('/api/schedules'),
   createSchedule: (body: Record<string, unknown>) =>
     request('/api/schedules', { method: 'POST', body: JSON.stringify(body) }),

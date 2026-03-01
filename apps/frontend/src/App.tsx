@@ -47,7 +47,7 @@ const titleByView: Record<View, { title: string; subtitle: string }> = {
   manual: { title: 'Manual Queue', subtitle: 'Resolve blocked automation sessions and resume execution.' },
   profile: { title: 'Profile', subtitle: 'Manage applicant identity, summary, and reusable context.' },
   runs: { title: 'Pipelines (Runs)', subtitle: 'Inspect pipeline status, filter aggressively, and drill into activity.' },
-  settings: { title: 'Settings', subtitle: 'Configure providers, behavior, credentials, and schedules.' },
+  settings: { title: 'Settings', subtitle: 'Configure LLM providers, ATS credentials, behavior, and schedules.' },
   'job-detail': { title: 'Job Detail', subtitle: 'Inspect a selected job and linked records.' },
   'application-detail': { title: 'Application Detail', subtitle: 'Inspect application outcomes and generated artifacts.' },
   'run-detail': { title: 'Run Detail', subtitle: 'Trace run events, metrics, and related work.' },

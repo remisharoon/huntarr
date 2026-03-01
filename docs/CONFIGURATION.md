@@ -34,6 +34,9 @@ Configure Huntarr using environment variables in `.env` file.
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `BRAVE_API_KEY` | Brave Search API key for job discovery | `null` |
+| `OPENAI_BASE_URL` | Default OpenAI-compatible endpoint (used for initial LLM provider migration) | `https://api.openai.com/v1` |
+| `OPENAI_API_KEY` | Environment fallback key for migrated default provider | `null` |
+| `OPENAI_MODEL` | Default model for migrated provider | `gpt-4o-mini` |
 | `PLAYWRIGHT_VNC_URL` | noVNC browser session URL | `http://localhost:7900` |
 | `BROWSER_HEADLESS` | Run browser in headless mode (no UI) | `true` |
 | `AUTO_SUBMIT_ENABLED` | Automatically submit applications | `true` |
@@ -50,6 +53,11 @@ VAULT_MASTER_PASSPHRASE=change-this-to-a-secure-random-passphrase
 
 # Job Discovery
 BRAVE_API_KEY=your-brave-api-key-here
+
+# LLM provider migration defaults / env fallback
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
 
 # Browser Automation
 PLAYWRIGHT_VNC_URL=http://localhost:7900
@@ -135,6 +143,19 @@ Profile configuration is stored in the `profiles` table and managed via API.
 ## System Configuration
 
 System configuration is stored in the `configs` table and can be updated via API.
+
+### LLM Providers (OpenAI-Compatible)
+
+LLM providers are stored in config key `llm_providers_v1` and managed with:
+
+- `GET /api/llm/providers`
+- `POST /api/llm/providers`
+- `PUT /api/llm/providers/{provider_id}`
+- `POST /api/llm/providers/{provider_id}/activate`
+- `DELETE /api/llm/providers/{provider_id}`
+- `POST /api/llm/providers/test`
+
+Provider API keys are stored in the encrypted credential vault under internal namespace `domain='llm-provider'`.
 
 ### Configuration Options
 
