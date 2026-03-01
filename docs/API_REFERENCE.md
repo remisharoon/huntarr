@@ -1,3 +1,17 @@
+---
+title: API Reference - Huntarr
+description: Complete reference for Huntarr REST API. All endpoints for runs, jobs, profiles, applications, manual actions, schedules, and more.
+keywords: API reference, REST API, endpoints, documentation, swagger, openapi
+robots: index, follow
+og:title: API Reference - Huntarr
+og:description: Complete reference for Huntarr REST API.
+og:type: website
+og:url: https://huntarr.github.io/huntarr/API_REFERENCE/
+twitter:card: summary
+twitter:title: API Reference - Huntarr
+twitter:description: Complete reference for Huntarr REST API.
+---
+
 # API Reference
 
 Complete reference for Huntarr REST API.

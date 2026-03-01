@@ -1,3 +1,17 @@
+---
+title: Developer Guide - Huntarr
+description: Guide for contributing to and extending Huntarr. Learn about development setup, project structure, adding connectors, creating ATS adapters, and testing.
+keywords: developer guide, contributing, development, setup, connectors, adapters, testing
+robots: index, follow
+og:title: Developer Guide - Huntarr
+og:description: Guide for contributing to and extending Huntarr.
+og:type: website
+og:url: https://huntarr.github.io/huntarr/DEVELOPER_GUIDE/
+twitter:card: summary
+twitter:title: Developer Guide - Huntarr
+twitter:description: Guide for contributing to and extending Huntarr.
+---
+
 # Developer Guide
 
 Guide for contributing to and extending Huntarr.

@@ -1,3 +1,17 @@
+---
+title: Troubleshooting - Huntarr
+description: Common issues and solutions for Huntarr. Fix installation, configuration, runtime, and platform-specific issues.
+keywords: troubleshooting, issues, solutions, errors, problems, debugging
+robots: index, follow
+og:title: Troubleshooting - Huntarr
+og:description: Common issues and solutions for Huntarr.
+og:type: website
+og:url: https://huntarr.github.io/huntarr/TROUBLESHOOTING/
+twitter:card: summary
+twitter:title: Troubleshooting - Huntarr
+twitter:description: Common issues and solutions for Huntarr.
+---
+
 # Troubleshooting
 
 Common issues and solutions for Huntarr.
@@ -6,7 +20,7 @@ Common issues and solutions for Huntarr.
 
 1. [Installation Issues](#installation-issues)
 2. [Database Issues](#database-issues)
-3. [Queue & Worker Issues](#queue--worker-issues)
+3. [Queue & Worker Issues](#queue-worker-issues)
 4. [Browser Automation Issues](#browser-automation-issues)
 5. [Manual Action Issues](#manual-action-issues)
 6. [ATS-Specific Issues](#ats-specific-issues)

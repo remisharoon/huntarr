@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block scripts %}
+  {{ super() }}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareDocumentation",
+    "name": "Huntarr Documentation",
+    "description": "Complete documentation for Huntarr - an automated job research and application agent",
+    "url": "{{ page.canonical_url }}",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Linux, macOS, Windows",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Organization",
+      "name": "Huntarr",
+      "url": "https://github.com/huntarr/huntarr"
+    }
+  }
+  </script>
+{% endblock %}

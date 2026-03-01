@@ -1,3 +1,17 @@
+---
+title: Configuration - Huntarr
+description: Complete reference for configuring Huntarr. Environment variables, database settings, profile configuration, and system configuration.
+keywords: configuration, environment variables, settings, database, profile configuration
+robots: index, follow
+og:title: Configuration - Huntarr
+og:description: Complete reference for configuring Huntarr.
+og:type: website
+og:url: https://huntarr.github.io/huntarr/CONFIGURATION/
+twitter:card: summary
+twitter:title: Configuration - Huntarr
+twitter:description: Complete reference for configuring Huntarr.
+---
+
 # Configuration
 
 Complete reference for configuring Huntarr.

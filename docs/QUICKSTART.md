@@ -1,3 +1,17 @@
+---
+title: Quick Start Guide - Huntarr
+description: Get Huntarr up and running in 5 minutes. Complete guide to installation, configuration, and first run.
+keywords: quick start, installation, setup, docker, docker compose, getting started
+robots: index, follow
+og:title: Quick Start Guide - Huntarr
+og:description: Get Huntarr up and running in 5 minutes with Docker Compose.
+og:type: website
+og:url: https://huntarr.github.io/huntarr/QUICKSTART/
+twitter:card: summary
+twitter:title: Quick Start Guide - Huntarr
+twitter:description: Get Huntarr up and running in 5 minutes with Docker Compose.
+---
+
 # Quick Start Guide
 
 Get Huntarr up and running in 5 minutes.

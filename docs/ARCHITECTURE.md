@@ -1,3 +1,17 @@
+---
+title: Architecture - Huntarr
+description: System architecture and design of Huntarr. Learn about the agent graph, browser automation, job discovery, database layer, and service architecture.
+keywords: architecture, design, system, langgraph, playwright, database, service architecture
+robots: index, follow
+og:title: Architecture - Huntarr
+og:description: System architecture and design of Huntarr.
+og:type: website
+og:url: https://huntarr.github.io/huntarr/ARCHITECTURE/
+twitter:card: summary
+twitter:title: Architecture - Huntarr
+twitter:description: System architecture and design of Huntarr.
+---
+
 # Architecture
 
 System architecture and design of Huntarr.

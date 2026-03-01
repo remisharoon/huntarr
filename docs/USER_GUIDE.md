@@ -1,3 +1,17 @@
+---
+title: User Guide - Huntarr
+description: Complete guide to using Huntarr for automated job hunting. Learn about profiles, job discovery, applications, scheduling, and more.
+keywords: user guide, profiles, job discovery, applications, scheduling, manual intervention
+robots: index, follow
+og:title: User Guide - Huntarr
+og:description: Complete guide to using Huntarr for automated job hunting.
+og:type: website
+og:url: https://huntarr.github.io/huntarr/USER_GUIDE/
+twitter:card: summary
+twitter:title: User Guide - Huntarr
+twitter:description: Complete guide to using Huntarr for automated job hunting.
+---
+
 # User Guide
 
 Complete guide to using Huntarr for automated job hunting.

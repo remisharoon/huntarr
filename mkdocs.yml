@@ -1,0 +1,126 @@
+site_name: Huntarr Documentation
+site_description: Automated job research & application agent - set it loose, let it hunt. Complete documentation for Huntarr.
+site_author: Huntarr
+repo_name: huntarr/huntarr
+repo_url: https://github.com/huntarr/huntarr
+
+# Copyright
+copyright: Copyright &copy; 2026
+
+# Theme: Material for MkDocs
+theme:
+  name: material
+  language: en
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+    - toc.integrate
+
+# Plugins
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - minify:
+      minify_html: true
+  - meta
+
+# Markdown extensions
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      title: On this page
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# Navigation structure
+nav:
+  - Home: index.md
+  - Quick Start: QUICKSTART.md
+  - User Guide: USER_GUIDE.md
+  - API Reference: API_REFERENCE.md
+  - Architecture: ARCHITECTURE.md
+  - Configuration: CONFIGURATION.md
+  - Troubleshooting: TROUBLESHOOTING.md
+  - Developer Guide: DEVELOPER_GUIDE.md
+
+# Google Analytics (GA4)
+google_analytics:
+  - G-XXXXXXXXXX
+  - auto
+
+# Additional pages
+extra:
+  analytics:
+    feedback:
+      title: Was this page helpful?
+      ratings:
+        - icon: material/emoticon-happy-outline
+          name: This page was helpful
+          data: 1
+          note: >-
+            Thanks for your feedback!
+        - icon: material/emoticon-sad-outline
+          name: This page could be improved
+          data: 0
+          note: >-
+            Thanks for your feedback! Help us improve this page by
+            <a href="https://github.com/huntarr/huntarr/issues" target="_blank" rel="noopener">opening an issue</a>.
+
+# Social cards for Open Graph
+extra_css:
+  - assets/extra.css
