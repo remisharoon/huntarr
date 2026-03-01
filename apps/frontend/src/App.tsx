@@ -9,10 +9,11 @@ import { JobDetailPage } from './pages/JobDetailPage'
 import { JobsPage } from './pages/JobsPage'
 import { ManualQueuePage } from './pages/ManualQueuePage'
 import { ProfilePage } from './pages/ProfilePage'
+import { RunDetailPage } from './pages/RunDetailPage'
 import { RunsPage } from './pages/RunsPage'
 import { SettingsPage } from './pages/SettingsPage'
 
-type View = 'dashboard' | 'jobs' | 'manual' | 'profile' | 'runs' | 'settings' | 'job-detail' | 'application-detail'
+type View = 'dashboard' | 'jobs' | 'manual' | 'profile' | 'runs' | 'settings' | 'job-detail' | 'application-detail' | 'run-detail'
 
 const tabs: Array<{ id: View; label: string; icon: any }> = [
   { id: 'dashboard', label: 'Dashboard', icon: Workflow },
@@ -34,6 +35,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null)
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
 
   const refresh = async () => {
     try {
@@ -101,7 +103,18 @@ export default function App() {
   const onBack = () => {
     setSelectedJobId(null)
     setSelectedApplicationId(null)
+    setSelectedRunId(null)
     setView('jobs')
+  }
+
+  const onBackToRuns = () => {
+    setSelectedRunId(null)
+    setView('runs')
+  }
+
+  const onSelectRun = (runId: string) => {
+    setSelectedRunId(runId)
+    setView('run-detail')
   }
 
   return (
@@ -147,13 +160,16 @@ export default function App() {
       {view === 'jobs' ? <JobsPage jobs={jobs} onApplyNow={onApplyNow} onViewJob={onViewJob} /> : null}
       {view === 'manual' ? <ManualQueuePage actions={manualActions} onStart={onStartManual} onResolve={onResolveManual} /> : null}
       {view === 'profile' ? <ProfilePage profile={profile} onSave={async (payload) => { await api.saveProfile(payload); await refresh() }} /> : null}
-      {view === 'runs' ? <RunsPage runs={runs} /> : null}
+      {view === 'runs' ? <RunsPage runs={runs} onSelectRun={onSelectRun} /> : null}
       {view === 'settings' ? <SettingsPage /> : null}
       {view === 'job-detail' && selectedJobId ? (
         <JobDetailPage jobId={selectedJobId} onBack={onBack} onViewApplication={onViewApplication} />
       ) : null}
       {view === 'application-detail' && selectedApplicationId ? (
         <ApplicationDetailPage applicationId={selectedApplicationId} onBack={onBack} />
+      ) : null}
+      {view === 'run-detail' && selectedRunId ? (
+        <RunDetailPage runId={selectedRunId} onBack={onBackToRuns} />
       ) : null}
     </div>
   )

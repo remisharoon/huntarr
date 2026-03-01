@@ -172,6 +172,16 @@ async def run_events(run_id: UUID, after_id: int = Query(default=0)) -> EventSou
     return EventSourceResponse(event_generator())
 
 
+@app.get('/api/runs/{run_id}/events/batch')
+async def run_events_batch(
+    run_id: UUID,
+    after_id: int = Query(default=0),
+    limit: int = Query(default=50, ge=1, le=250),
+) -> list[dict[str, Any]]:
+    events = await get_repo().fetch_run_events(run_id, after_id=after_id, limit=limit)
+    return events
+
+
 @app.get('/api/jobs')
 async def list_jobs(limit: int = Query(default=200, ge=1, le=500)) -> dict[str, Any]:
     jobs = await get_repo().list_jobs(limit=limit)

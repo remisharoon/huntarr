@@ -15,6 +15,14 @@ async function request(path, init) {
 }
 export const api = {
     listRuns: () => request('/api/runs'),
+    getRun: (id) => request(`/api/runs/${id}`),
+    getRunEvents: (id, limit = 50, afterId = 0) => request(`/api/runs/${id}/events/batch?limit=${limit}&after_id=${afterId}`),
+    getRunApplications: (id) => request('/api/applications').then((res) => ({
+        items: res.items.filter((app) => app.run_id === id),
+    })),
+    getRunManualActions: (id) => request('/api/manual-actions').then((res) => ({
+        items: res.items.filter((action) => action.run_id === id),
+    })),
     createRun: (body) => request('/api/runs', { method: 'POST', body: JSON.stringify(body) }),
     pauseRun: (id) => request(`/api/runs/${id}/pause`, { method: 'POST' }),
     resumeRun: (id) => request(`/api/runs/${id}/resume`, { method: 'POST' }),
@@ -42,6 +50,20 @@ export const api = {
     deleteCredential: (domain, username) => request(`/api/credentials/${domain}/${username}`, { method: 'DELETE' }),
     storeCredential: (body) => request('/api/credentials', { method: 'POST', body: JSON.stringify(body) }),
 };
+export function subscribeToRunEvents(runId, onEvent, onError) {
+    const eventSource = new EventSource(`${API_BASE}/api/runs/${runId}/events`);
+    eventSource.addEventListener('run_event', (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            onEvent(data);
+        }
+        catch (e) {
+            console.error('Failed to parse event:', e);
+        }
+    });
+    eventSource.onerror = onError || (() => console.error('EventSource error'));
+    return () => eventSource.close();
+}
 export function eventsUrl(runId) {
     return `${API_BASE}/api/runs/${runId}/events`;
 }

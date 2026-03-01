@@ -9,6 +9,7 @@ import { JobDetailPage } from './pages/JobDetailPage';
 import { JobsPage } from './pages/JobsPage';
 import { ManualQueuePage } from './pages/ManualQueuePage';
 import { ProfilePage } from './pages/ProfilePage';
+import { RunDetailPage } from './pages/RunDetailPage';
 import { RunsPage } from './pages/RunsPage';
 import { SettingsPage } from './pages/SettingsPage';
 const tabs = [
@@ -30,6 +31,7 @@ export default function App() {
     const [error, setError] = useState(null);
     const [selectedJobId, setSelectedJobId] = useState(null);
     const [selectedApplicationId, setSelectedApplicationId] = useState(null);
+    const [selectedRunId, setSelectedRunId] = useState(null);
     const refresh = async () => {
         try {
             setError(null);
@@ -89,10 +91,19 @@ export default function App() {
     const onBack = () => {
         setSelectedJobId(null);
         setSelectedApplicationId(null);
+        setSelectedRunId(null);
         setView('jobs');
+    };
+    const onBackToRuns = () => {
+        setSelectedRunId(null);
+        setView('runs');
+    };
+    const onSelectRun = (runId) => {
+        setSelectedRunId(runId);
+        setView('run-detail');
     };
     return (_jsxs("div", { className: "mx-auto min-h-screen max-w-7xl px-4 py-6 md:px-8", children: [_jsxs("header", { className: "mb-6 flex flex-col gap-4 rounded-3xl bg-ink p-6 text-white shadow-card md:flex-row md:items-center md:justify-between", children: [_jsxs("div", { children: [_jsx("p", { className: "font-display text-3xl", children: "huntarr" }), _jsx("p", { className: "text-sm text-white/80", children: "Automated job research and application command center" }), latestRunId ? _jsxs("p", { className: "mt-2 text-xs text-white/70", children: ["Latest run: ", latestRunId] }) : null] }), _jsxs("div", { className: "flex gap-2", children: [_jsx(Button, { onClick: refresh, variant: "ghost", className: "border border-white/30 text-white hover:bg-white/10", children: "Refresh" }), _jsx(Button, { onClick: startHunt, disabled: busy, className: "bg-accent text-white", children: "Start Hunt" })] })] }), error ? _jsx(Card, { className: "mb-4 border-red-200 text-red-700", children: error }) : null, _jsx("nav", { className: "mb-5 flex flex-wrap gap-2", children: tabs.map((tab) => {
                     const Icon = tab.icon;
                     return (_jsx(Button, { variant: view === tab.id ? 'secondary' : 'ghost', className: view === tab.id ? '' : 'border border-black/10', onClick: () => setView(tab.id), children: _jsxs("span", { className: "inline-flex items-center gap-2", children: [_jsx(Icon, { size: 16 }), tab.label] }) }, tab.id));
-                }) }), view === 'dashboard' ? _jsx(DashboardPage, { runs: runs, jobs: jobs, manualActions: manualActions, applications: applications }) : null, view === 'jobs' ? _jsx(JobsPage, { jobs: jobs, onApplyNow: onApplyNow, onViewJob: onViewJob }) : null, view === 'manual' ? _jsx(ManualQueuePage, { actions: manualActions, onStart: onStartManual, onResolve: onResolveManual }) : null, view === 'profile' ? _jsx(ProfilePage, { profile: profile, onSave: async (payload) => { await api.saveProfile(payload); await refresh(); } }) : null, view === 'runs' ? _jsx(RunsPage, { runs: runs }) : null, view === 'settings' ? _jsx(SettingsPage, {}) : null, view === 'job-detail' && selectedJobId ? (_jsx(JobDetailPage, { jobId: selectedJobId, onBack: onBack, onViewApplication: onViewApplication })) : null, view === 'application-detail' && selectedApplicationId ? (_jsx(ApplicationDetailPage, { applicationId: selectedApplicationId, onBack: onBack })) : null] }));
+                }) }), view === 'dashboard' ? _jsx(DashboardPage, { runs: runs, jobs: jobs, manualActions: manualActions, applications: applications }) : null, view === 'jobs' ? _jsx(JobsPage, { jobs: jobs, onApplyNow: onApplyNow, onViewJob: onViewJob }) : null, view === 'manual' ? _jsx(ManualQueuePage, { actions: manualActions, onStart: onStartManual, onResolve: onResolveManual }) : null, view === 'profile' ? _jsx(ProfilePage, { profile: profile, onSave: async (payload) => { await api.saveProfile(payload); await refresh(); } }) : null, view === 'runs' ? _jsx(RunsPage, { runs: runs, onSelectRun: onSelectRun }) : null, view === 'settings' ? _jsx(SettingsPage, {}) : null, view === 'job-detail' && selectedJobId ? (_jsx(JobDetailPage, { jobId: selectedJobId, onBack: onBack, onViewApplication: onViewApplication })) : null, view === 'application-detail' && selectedApplicationId ? (_jsx(ApplicationDetailPage, { applicationId: selectedApplicationId, onBack: onBack })) : null, view === 'run-detail' && selectedRunId ? (_jsx(RunDetailPage, { runId: selectedRunId, onBack: onBackToRuns })) : null] }));
 }

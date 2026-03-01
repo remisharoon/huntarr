@@ -1,3 +1,5 @@
+import type { Application, ManualAction, Run, RunEvent } from '../types'
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -17,6 +19,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   listRuns: () => request<{ items: any[] }>('/api/runs'),
+  getRun: (id: string) => request<Run>(`/api/runs/${id}`),
+  getRunEvents: (id: string, limit: number = 50, afterId: number = 0) =>
+    request<RunEvent[]>(`/api/runs/${id}/events/batch?limit=${limit}&after_id=${afterId}`),
+  getRunApplications: (id: string) =>
+    request<{ items: any[] }>('/api/applications').then((res) => ({
+      items: res.items.filter((app: any) => app.run_id === id),
+    })),
+  getRunManualActions: (id: string) =>
+    request<{ items: any[] }>('/api/manual-actions').then((res) => ({
+      items: res.items.filter((action: any) => action.run_id === id),
+    })),
   createRun: (body: Record<string, unknown>) =>
     request('/api/runs', { method: 'POST', body: JSON.stringify(body) }),
   pauseRun: (id: string) => request(`/api/runs/${id}/pause`, { method: 'POST' }),
@@ -52,6 +65,27 @@ export const api = {
     request(`/api/credentials/${domain}/${username}`, { method: 'DELETE' }),
   storeCredential: (body: Record<string, unknown>) =>
     request('/api/credentials', { method: 'POST', body: JSON.stringify(body) }),
+}
+
+export function subscribeToRunEvents(
+  runId: string,
+  onEvent: (event: RunEvent) => void,
+  onError?: (error: Event) => void
+): () => void {
+  const eventSource = new EventSource(`${API_BASE}/api/runs/${runId}/events`)
+
+  eventSource.addEventListener('run_event', (event) => {
+    try {
+      const data = JSON.parse((event as MessageEvent).data)
+      onEvent(data)
+    } catch (e) {
+      console.error('Failed to parse event:', e)
+    }
+  })
+
+  eventSource.onerror = onError || (() => console.error('EventSource error'))
+
+  return () => eventSource.close()
 }
 
 export function eventsUrl(runId: string): string {
