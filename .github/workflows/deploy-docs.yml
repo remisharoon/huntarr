@@ -34,7 +34,8 @@ jobs:
 
       - name: Install MkDocs Material theme
         run: |
-          pip install mkdocs-material
+          pip install 'mkdocs<2.0'
+          pip install 'mkdocs-material<10.0'
           pip install mkdocs-minify-plugin
           pip install mkdocs-meta-descriptions-plugin
           pip install pymdown-extensions
