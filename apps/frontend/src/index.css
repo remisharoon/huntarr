@@ -3,23 +3,170 @@
 @tailwind utilities;
 
 :root {
-  --surface: #f4f7ef;
-  --ink: #1c2328;
-  --accent: #0d9f6e;
-  --muted: #5f6b73;
+  --bg-app: #081226;
+  --bg-surface: #0f1b33;
+  --bg-elevated: #132342;
+  --text-primary: #e6edf9;
+  --text-muted: #9aa7c0;
+  --border-subtle: #253559;
+  --shell-border-strong: #3b5d91;
+  --shell-inset-x: 20px;
+  --shell-inset-y: 18px;
+  --shell-gap: 14px;
+  --shell-radius: 20px;
+  --accent: #51a4ff;
+  --success: #7ee2a8;
+  --warning: #f7c869;
+  --danger: #ff7f96;
+  --ring-focus: #86b9ff;
+  --shadow-card: 0 12px 24px -18px rgba(0, 0, 0, 0.65);
+  --shadow-panel: 0 22px 55px -28px rgba(0, 0, 0, 0.78);
+  color-scheme: dark;
 }
 
-body {
-  margin: 0;
-  min-height: 100vh;
-  font-family: 'IBM Plex Sans', sans-serif;
-  color: var(--ink);
-  background:
-    radial-gradient(circle at 20% 0%, rgba(13, 159, 110, 0.15), transparent 40%),
-    radial-gradient(circle at 90% 10%, rgba(18, 52, 86, 0.1), transparent 35%),
-    var(--surface);
+html.theme-dark {
+  --bg-app: #081226;
+  --bg-surface: #0f1b33;
+  --bg-elevated: #132342;
+  --text-primary: #e6edf9;
+  --text-muted: #9aa7c0;
+  --border-subtle: #253559;
+  --shell-border-strong: #3b5d91;
+  --accent: #51a4ff;
+  --success: #7ee2a8;
+  --warning: #f7c869;
+  --danger: #ff7f96;
+  --ring-focus: #86b9ff;
+  --shadow-card: 0 12px 24px -18px rgba(0, 0, 0, 0.65);
+  --shadow-panel: 0 22px 55px -28px rgba(0, 0, 0, 0.78);
+  color-scheme: dark;
+}
+
+html.theme-light {
+  --bg-app: #f4f8ff;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f8fbff;
+  --text-primary: #172338;
+  --text-muted: #5e6c84;
+  --border-subtle: #d6dfea;
+  --shell-border-strong: #8ea8cd;
+  --accent: #156ff0;
+  --success: #1f9d59;
+  --warning: #be7b00;
+  --danger: #c73857;
+  --ring-focus: #377df7;
+  --shadow-card: 0 14px 24px -20px rgba(19, 35, 62, 0.22);
+  --shadow-panel: 0 26px 55px -40px rgba(19, 35, 62, 0.34);
+  color-scheme: light;
 }
 
 * {
   box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'IBM Plex Sans', sans-serif;
+  color: var(--text-primary);
+  background:
+    radial-gradient(circle at 15% 10%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 35%),
+    radial-gradient(circle at 85% 5%, color-mix(in srgb, var(--success) 10%, transparent), transparent 30%),
+    var(--bg-app);
+}
+
+.app-frame {
+  min-height: 100vh;
+  padding: var(--shell-inset-y) var(--shell-inset-x);
+}
+
+.app-shell {
+  min-height: calc(100vh - (var(--shell-inset-y) * 2));
+  display: flex;
+  gap: var(--shell-gap);
+  border: 2px solid var(--shell-border-strong);
+  border-radius: var(--shell-radius);
+  padding: var(--shell-gap);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--bg-surface) 58%, transparent),
+      color-mix(in srgb, var(--bg-app) 72%, transparent)
+    );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--shell-border-strong) 35%, transparent),
+    var(--shadow-panel);
+}
+
+.app-rail {
+  border: 1px solid color-mix(in srgb, var(--shell-border-strong) 72%, var(--border-subtle));
+  border-radius: calc(var(--shell-radius) - 6px);
+  background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  overflow: hidden;
+}
+
+.app-content-surface {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid color-mix(in srgb, var(--shell-border-strong) 68%, var(--border-subtle));
+  border-radius: calc(var(--shell-radius) - 6px);
+  background: color-mix(in srgb, var(--bg-surface) 95%, transparent);
+  overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  :root {
+    --shell-inset-x: 9px;
+    --shell-inset-y: 9px;
+    --shell-gap: 9px;
+    --shell-radius: 16px;
+  }
+}
+
+@keyframes shell-slide {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sidebar-slide {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.motion-enter {
+  animation: shell-slide 200ms ease-out;
+}
+
+.motion-sidebar {
+  animation: sidebar-slide 220ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

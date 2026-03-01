@@ -1,3 +1,5 @@
+export type ThemeMode = 'dark' | 'light' | 'system'
+
 export interface Run {
   id: string
   mode: 'manual' | 'scheduled'
@@ -19,6 +21,17 @@ export interface RunMetrics {
   manual_required: number
   skipped: number
 }
+
+export interface RunFilterState {
+  status: 'all' | Run['status']
+  mode: 'all' | Run['mode']
+  query: string
+  dateScope: '24h' | '7d' | '30d' | 'all'
+}
+
+export type RunSortKey = 'started_at' | 'duration' | 'status'
+
+export type SortDirection = 'asc' | 'desc'
 
 export interface SearchConfig {
   role_keywords?: string[]

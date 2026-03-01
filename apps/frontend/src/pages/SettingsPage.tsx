@@ -1,26 +1,18 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 
 import { api } from '../lib/api'
-import { Button, Card, Input, TextArea } from '../components/ui'
-
-type SectionState = { [key: string]: boolean }
+import { Badge, Button, Card, Input, PageHeader, TextArea } from '../components/ui'
 
 export function SettingsPage() {
   const [config, setConfig] = useState<any>({})
   const [credentials, setCredentials] = useState<any[]>([])
   const [schedules, setSchedules] = useState<any[]>([])
-  const [expanded, setExpanded] = useState<SectionState>({
-    api: true,
-    behavior: false,
-    schedules: false,
-  })
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
 
   const [newCredential, setNewCredential] = useState({ domain: '', username: '', password: '' })
   const [newSchedule, setNewSchedule] = useState({ name: '', cron_expr: '', timezone: 'UTC', payload: '{}' })
-  const [scheduleFormExpanded, setScheduleFormExpanded] = useState(false)
 
   const loadData = async () => {
     try {
@@ -44,10 +36,11 @@ export function SettingsPage() {
   const saveConfig = async (updates: Record<string, unknown>) => {
     setBusy(true)
     try {
-      await api.putConfig({ ...config, ...updates })
-      setConfig({ ...config, ...updates })
+      const nextValue = { ...config, ...updates }
+      await api.putConfig(nextValue)
+      setConfig(nextValue)
       setMessage('Settings saved successfully')
-      setTimeout(() => setMessage(null), 3000)
+      setTimeout(() => setMessage(null), 2500)
     } catch (err: any) {
       setMessage(`Error saving settings: ${err.message}`)
     } finally {
@@ -55,19 +48,20 @@ export function SettingsPage() {
     }
   }
 
-  const addCredential = async (e: FormEvent) => {
-    e.preventDefault()
+  const addCredential = async (event: FormEvent) => {
+    event.preventDefault()
     if (!newCredential.domain || !newCredential.username || !newCredential.password) {
       setMessage('Please fill in all credential fields')
       return
     }
+
     setBusy(true)
     try {
       await api.storeCredential(newCredential)
       setNewCredential({ domain: '', username: '', password: '' })
       await loadData()
       setMessage('Credential added successfully')
-      setTimeout(() => setMessage(null), 3000)
+      setTimeout(() => setMessage(null), 2500)
     } catch (err: any) {
       setMessage(`Error adding credential: ${err.message}`)
     } finally {
@@ -76,13 +70,14 @@ export function SettingsPage() {
   }
 
   const deleteCredential = async (domain: string, username: string) => {
-    if (!confirm(`Are you sure you want to delete the credential for ${username}@${domain}?`)) return
+    if (!window.confirm(`Delete credential for ${username}@${domain}?`)) return
+
     setBusy(true)
     try {
       await api.deleteCredential(domain, username)
       await loadData()
       setMessage('Credential deleted successfully')
-      setTimeout(() => setMessage(null), 3000)
+      setTimeout(() => setMessage(null), 2500)
     } catch (err: any) {
       setMessage(`Error deleting credential: ${err.message}`)
     } finally {
@@ -90,27 +85,29 @@ export function SettingsPage() {
     }
   }
 
-  const addSchedule = async (e: FormEvent) => {
-    e.preventDefault()
+  const addSchedule = async (event: FormEvent) => {
+    event.preventDefault()
     if (!newSchedule.name || !newSchedule.cron_expr) {
-      setMessage('Please fill in schedule name and cron expression')
+      setMessage('Schedule name and cron expression are required')
       return
     }
+
+    let payload: Record<string, unknown> = {}
+
+    try {
+      payload = JSON.parse(newSchedule.payload)
+    } catch {
+      setMessage('Invalid JSON in schedule payload')
+      return
+    }
+
     setBusy(true)
     try {
-      let payload: Record<string, unknown> = {}
-      try {
-        payload = JSON.parse(newSchedule.payload)
-      } catch {
-        setMessage('Invalid JSON in schedule payload')
-        return
-      }
       await api.createSchedule({ ...newSchedule, payload })
       setNewSchedule({ name: '', cron_expr: '', timezone: 'UTC', payload: '{}' })
-      setScheduleFormExpanded(false)
       await loadData()
       setMessage('Schedule created successfully')
-      setTimeout(() => setMessage(null), 3000)
+      setTimeout(() => setMessage(null), 2500)
     } catch (err: any) {
       setMessage(`Error creating schedule: ${err.message}`)
     } finally {
@@ -119,13 +116,14 @@ export function SettingsPage() {
   }
 
   const deleteSchedule = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this schedule?')) return
+    if (!window.confirm('Delete this schedule?')) return
+
     setBusy(true)
     try {
       await api.deleteSchedule(id)
       await loadData()
       setMessage('Schedule deleted successfully')
-      setTimeout(() => setMessage(null), 3000)
+      setTimeout(() => setMessage(null), 2500)
     } catch (err: any) {
       setMessage(`Error deleting schedule: ${err.message}`)
     } finally {
@@ -133,199 +131,182 @@ export function SettingsPage() {
     }
   }
 
-  const toggleSection = (key: string) => {
-    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
-  }
-
   return (
     <div className="space-y-4">
-      {message && <Card className="border-accent bg-accent/10 text-accent">{message}</Card>}
+      <PageHeader
+        title="Settings"
+        subtitle="Provider credentials, behavior flags, and scheduling in one operational layout."
+        actions={<Badge tone={busy ? 'warning' : 'success'}>{busy ? 'Processing' : 'Ready'}</Badge>}
+      />
 
-      <Card>
-        <div className="flex cursor-pointer items-center justify-between" onClick={() => toggleSection('api')}>
-          <h2 className="font-display text-xl">API Configuration</h2>
-          {expanded.api ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-        </div>
-        {expanded.api && (
-          <div className="mt-4 space-y-4">
-            <div className="space-y-3">
-              <h3 className="font-semibold">Stored API Keys</h3>
-              {credentials.length === 0 ? (
-                <p className="text-sm text-muted">No API keys stored yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {credentials.map((cred, idx) => (
-                    <div key={`${cred.domain}-${cred.username}-${idx}`} className="flex items-center justify-between rounded-lg bg-white/50 p-3">
-                      <div>
-                        <p className="font-medium">{cred.domain}</p>
-                        <p className="text-sm text-muted">{cred.username}</p>
-                      </div>
-                      <Button onClick={() => deleteCredential(cred.domain, cred.username)} variant="ghost" className="text-red-600 hover:bg-red-50">
-                        <Trash2 size={16} />
-                      </Button>
-                    </div>
-                  ))}
+      {message ? <Card variant="muted" className="border-accent/50 text-accent">{message}</Card> : null}
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card className="space-y-4">
+          <h2 className="font-display text-xl text-text">Application Behavior</h2>
+
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-text">OpenAI Model</label>
+            <Input
+              value={config.openai_model ?? 'gpt-4o-mini'}
+              onChange={(event) => setConfig({ ...config, openai_model: event.target.value })}
+              onBlur={() => saveConfig({ openai_model: config.openai_model })}
+            />
+          </div>
+
+          <div className="space-y-2 rounded-xl border border-border bg-elevated/50 p-3">
+            <label className="flex items-center gap-2 text-sm font-semibold text-text">
+              <input
+                type="checkbox"
+                checked={config.auto_submit_enabled ?? true}
+                onChange={(event) => {
+                  const value = event.target.checked
+                  setConfig({ ...config, auto_submit_enabled: value })
+                  saveConfig({ auto_submit_enabled: value })
+                }}
+              />
+              Auto-submit applications
+            </label>
+            <p className="text-xs text-muted">Immediately submit eligible forms without manual review.</p>
+          </div>
+
+          <div className="space-y-2 rounded-xl border border-border bg-elevated/50 p-3">
+            <label className="flex items-center gap-2 text-sm font-semibold text-text">
+              <input
+                type="checkbox"
+                checked={config.browser_headless ?? true}
+                onChange={(event) => {
+                  const value = event.target.checked
+                  setConfig({ ...config, browser_headless: value })
+                  saveConfig({ browser_headless: value })
+                }}
+              />
+              Headless browser
+            </label>
+            <p className="text-xs text-muted">Disable only when visual debugging is necessary.</p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-text">noVNC URL</label>
+            <Input
+              value={config.vnc_url ?? 'http://localhost:7900'}
+              onChange={(event) => setConfig({ ...config, vnc_url: event.target.value })}
+              onBlur={() => saveConfig({ vnc_url: config.vnc_url })}
+            />
+          </div>
+        </Card>
+
+        <Card className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-xl text-text">Stored Credentials</h2>
+            <Badge tone="info">{credentials.length}</Badge>
+          </div>
+
+          {credentials.length === 0 ? (
+            <p className="text-sm text-muted">No credentials stored yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {credentials.map((credential, index) => (
+                <div key={`${credential.domain}-${credential.username}-${index}`} className="flex items-center justify-between rounded-xl border border-border bg-elevated/60 px-3 py-2">
+                  <div>
+                    <p className="font-semibold text-text">{credential.domain}</p>
+                    <p className="text-xs text-muted">{credential.username}</p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    className="h-8 px-2 text-xs"
+                    onClick={() => deleteCredential(credential.domain, credential.username)}
+                  >
+                    <Trash2 size={14} /> Delete
+                  </Button>
                 </div>
-              )}
-              <form onSubmit={addCredential} className="space-y-2 rounded-lg bg-white/50 p-3">
-                <Input
-                  placeholder="Domain (e.g., openai.com, brave.com)"
-                  value={newCredential.domain}
-                  onChange={(e) => setNewCredential({ ...newCredential, domain: e.target.value })}
-                />
-                <Input
-                  placeholder="Username (e.g., sk-*, api-key)"
-                  value={newCredential.username}
-                  onChange={(e) => setNewCredential({ ...newCredential, username: e.target.value })}
-                />
-                <Input
-                  type="password"
-                  placeholder="API Key / Password"
-                  value={newCredential.password}
-                  onChange={(e) => setNewCredential({ ...newCredential, password: e.target.value })}
-                />
-                <Button type="submit" disabled={busy}>
-                  <Plus size={16} className="mr-1" />
-                  Add Credential
-                </Button>
-              </form>
+              ))}
             </div>
-          </div>
-        )}
-      </Card>
+          )}
 
-      <Card>
-        <div className="flex cursor-pointer items-center justify-between" onClick={() => toggleSection('behavior')}>
-          <h2 className="font-display text-xl">Application Behavior</h2>
-          {expanded.behavior ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-        </div>
-        {expanded.behavior && (
-          <div className="mt-4 space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">OpenAI Model</label>
-              <Input
-                value={config.openai_model ?? 'gpt-4o-mini'}
-                onChange={(e) => setConfig({ ...config, openai_model: e.target.value })}
-                onBlur={() => saveConfig({ openai_model: config.openai_model })}
-              />
-              <p className="text-xs text-muted">The OpenAI model to use for AI-powered features</p>
-            </div>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={config.auto_submit_enabled ?? true}
-                  onChange={(e) => {
-                    const newValue = e.target.checked
-                    setConfig({ ...config, auto_submit_enabled: newValue })
-                    saveConfig({ auto_submit_enabled: newValue })
-                  }}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm font-medium">Auto-Submit Enabled</span>
-              </label>
-              <p className="text-xs text-muted">Automatically submit applications without manual review</p>
-            </div>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={config.browser_headless ?? true}
-                  onChange={(e) => {
-                    const newValue = e.target.checked
-                    setConfig({ ...config, browser_headless: newValue })
-                    saveConfig({ browser_headless: newValue })
-                  }}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm font-medium">Headless Browser</span>
-              </label>
-              <p className="text-xs text-muted">Run browser in headless mode (no GUI)</p>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">VNC URL</label>
-              <Input
-                value={config.vnc_url ?? 'http://localhost:7900'}
-                onChange={(e) => setConfig({ ...config, vnc_url: e.target.value })}
-                onBlur={() => saveConfig({ vnc_url: config.vnc_url })}
-              />
-              <p className="text-xs text-muted">URL for noVNC manual intervention sessions</p>
-            </div>
-          </div>
-        )}
-      </Card>
+          <form onSubmit={addCredential} className="space-y-2 rounded-xl border border-border bg-elevated/50 p-3">
+            <p className="text-sm font-semibold text-text">Add credential</p>
+            <Input
+              placeholder="Domain (openai.com, brave.com)"
+              value={newCredential.domain}
+              onChange={(event) => setNewCredential({ ...newCredential, domain: event.target.value })}
+            />
+            <Input
+              placeholder="Username or key id"
+              value={newCredential.username}
+              onChange={(event) => setNewCredential({ ...newCredential, username: event.target.value })}
+            />
+            <Input
+              type="password"
+              placeholder="Secret"
+              value={newCredential.password}
+              onChange={(event) => setNewCredential({ ...newCredential, password: event.target.value })}
+            />
+            <Button type="submit" disabled={busy} className="h-8 px-2 text-xs">
+              <Plus size={14} /> Add Credential
+            </Button>
+          </form>
+        </Card>
+      </div>
 
-      <Card>
-        <div className="flex cursor-pointer items-center justify-between" onClick={() => toggleSection('schedules')}>
-          <h2 className="font-display text-xl">Scheduling</h2>
-          {expanded.schedules ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+      <Card className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-xl text-text">Scheduling</h2>
+          <Badge tone="default">{schedules.length} schedules</Badge>
         </div>
-        {expanded.schedules && (
-          <div className="mt-4 space-y-4">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold">Automated Job Hunting Schedules</h3>
-                <Button onClick={() => setScheduleFormExpanded(!scheduleFormExpanded)} variant="ghost" className="text-sm">
-                  <Plus size={16} className="mr-1" />
-                  Add Schedule
-                </Button>
+
+        {schedules.length === 0 ? (
+          <p className="text-sm text-muted">No schedules configured yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {schedules.map((schedule) => (
+              <div key={schedule.id} className="grid grid-cols-1 gap-2 rounded-xl border border-border bg-elevated/60 px-3 py-2 md:grid-cols-[1.5fr_1fr_auto] md:items-center">
+                <div>
+                  <p className="font-semibold text-text">{schedule.name}</p>
+                  <p className="text-xs text-muted">{schedule.cron_expr} ({schedule.timezone})</p>
+                </div>
+                <p className="text-xs text-muted">
+                  Next run: {schedule.next_run_at ? new Date(schedule.next_run_at).toLocaleString() : 'N/A'}
+                </p>
+                <div className="flex justify-start md:justify-end">
+                  <Button variant="danger" className="h-8 px-2 text-xs" onClick={() => deleteSchedule(schedule.id)}>
+                    <Trash2 size={14} /> Delete
+                  </Button>
+                </div>
               </div>
-              {schedules.length === 0 ? (
-                <p className="text-sm text-muted">No schedules configured yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {schedules.map((schedule) => (
-                    <div key={schedule.id} className="flex items-center justify-between rounded-lg bg-white/50 p-3">
-                      <div>
-                        <p className="font-medium">{schedule.name}</p>
-                        <p className="text-sm text-muted">
-                          {schedule.cron_expr} ({schedule.timezone})
-                        </p>
-                        <p className="text-xs text-muted">
-                          Next run: {schedule.next_run_at ? new Date(schedule.next_run_at).toLocaleString() : 'N/A'}
-                        </p>
-                      </div>
-                      <Button onClick={() => deleteSchedule(schedule.id)} variant="ghost" className="text-red-600 hover:bg-red-50">
-                        <Trash2 size={16} />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {scheduleFormExpanded && (
-                <form onSubmit={addSchedule} className="space-y-2 rounded-lg bg-white/50 p-3">
-                  <Input
-                    placeholder="Schedule name (e.g., Daily Morning Hunt)"
-                    value={newSchedule.name}
-                    onChange={(e) => setNewSchedule({ ...newSchedule, name: e.target.value })}
-                  />
-                  <Input
-                    placeholder="Cron expression (e.g., 0 9 * * *)"
-                    value={newSchedule.cron_expr}
-                    onChange={(e) => setNewSchedule({ ...newSchedule, cron_expr: e.target.value })}
-                  />
-                  <Input
-                    placeholder="Timezone (e.g., UTC, America/New_York)"
-                    value={newSchedule.timezone}
-                    onChange={(e) => setNewSchedule({ ...newSchedule, timezone: e.target.value })}
-                  />
-                  <TextArea
-                    rows={3}
-                    placeholder='Schedule payload (JSON, e.g., {"mode": "scheduled", "search_config": {}})'
-                    value={newSchedule.payload}
-                    onChange={(e) => setNewSchedule({ ...newSchedule, payload: e.target.value })}
-                  />
-                  <Button type="submit" disabled={busy}>
-                    Create Schedule
-                  </Button>
-                  <Button type="button" onClick={() => setScheduleFormExpanded(false)} variant="ghost">
-                    Cancel
-                  </Button>
-                </form>
-              )}
-            </div>
+            ))}
           </div>
         )}
+
+        <form onSubmit={addSchedule} className="space-y-2 rounded-xl border border-border bg-elevated/50 p-3">
+          <p className="text-sm font-semibold text-text">Create schedule</p>
+          <div className="grid gap-2 md:grid-cols-2">
+            <Input
+              placeholder="Schedule name"
+              value={newSchedule.name}
+              onChange={(event) => setNewSchedule({ ...newSchedule, name: event.target.value })}
+            />
+            <Input
+              placeholder="Cron expression"
+              value={newSchedule.cron_expr}
+              onChange={(event) => setNewSchedule({ ...newSchedule, cron_expr: event.target.value })}
+            />
+            <Input
+              placeholder="Timezone"
+              value={newSchedule.timezone}
+              onChange={(event) => setNewSchedule({ ...newSchedule, timezone: event.target.value })}
+            />
+          </div>
+          <TextArea
+            rows={4}
+            placeholder='Payload JSON, e.g. {"mode":"scheduled","search_config":{}}'
+            value={newSchedule.payload}
+            onChange={(event) => setNewSchedule({ ...newSchedule, payload: event.target.value })}
+          />
+          <Button type="submit" disabled={busy} className="h-8 px-2 text-xs">
+            <Plus size={14} /> Create Schedule
+          </Button>
+        </form>
       </Card>
     </div>
   )

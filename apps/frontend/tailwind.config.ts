@@ -5,17 +5,30 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        surface: '#f4f7ef',
-        ink: '#1c2328',
-        accent: '#0d9f6e',
-        muted: '#5f6b73',
+        app: 'var(--bg-app)',
+        surface: 'var(--bg-surface)',
+        elevated: 'var(--bg-elevated)',
+        ink: 'var(--text-primary)',
+        text: 'var(--text-primary)',
+        muted: 'var(--text-muted)',
+        border: 'var(--border-subtle)',
+        accent: 'var(--accent)',
+        success: 'var(--success)',
+        warning: 'var(--warning)',
+        danger: 'var(--danger)',
       },
       fontFamily: {
         display: ['"Space Grotesk"', 'sans-serif'],
         body: ['"IBM Plex Sans"', 'sans-serif'],
       },
       boxShadow: {
-        card: '0 12px 30px -20px rgba(0,0,0,0.35)',
+        card: 'var(--shadow-card)',
+        panel: 'var(--shadow-panel)',
+      },
+      borderRadius: {
+        xl: '0.85rem',
+        '2xl': '1rem',
+        '3xl': '1.25rem',
       },
     },
   },
