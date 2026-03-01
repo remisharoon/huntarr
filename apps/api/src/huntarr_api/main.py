@@ -334,6 +334,84 @@ async def parse_resume(path: str = Query(..., description='Absolute path from re
     return parsed
 
 
+@app.post('/api/profile/import-resume')
+async def import_resume(file: UploadFile = File(...)) -> dict[str, Any]:
+    """Upload a PDF resume and extract structured profile data using an LLM."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail='Missing file name')
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail='Only PDF files are supported')
+
+    # Save upload
+    file_path = settings.uploads_root / file.filename
+    content = await file.read()
+    file_path.write_bytes(content)
+
+    # Extract raw text
+    reader = PdfReader(str(file_path))
+    raw_text = '\n'.join(page.extract_text() or '' for page in reader.pages)
+
+    # AI extraction — falls back to rule-based if no API key
+    if settings.openai_api_key:
+        try:
+            import json as _json
+
+            from openai import AsyncOpenAI
+
+            client = AsyncOpenAI(
+                api_key=settings.openai_api_key,
+                base_url=settings.openai_base_url,
+            )
+            prompt = (
+                'You are a resume parser. Extract structured data from the resume text below.\n'
+                'Return ONLY valid JSON (no markdown, no explanation) with these fields '
+                '(omit any you cannot find):\n'
+                '{\n'
+                '  "full_name": "...",\n'
+                '  "email": "...",\n'
+                '  "phone": "...",\n'
+                '  "location": "...",\n'
+                '  "years_experience": 0,\n'
+                '  "summary": "2-4 sentence professional summary",\n'
+                '  "skills": ["skill1", "skill2"],\n'
+                '  "experience": [{"title": "...", "company": "...", "start": "...", "end": "...", "description": "..."}],\n'
+                '  "education": [{"degree": "...", "institution": "...", "year": "..."}]\n'
+                '}\n\n'
+                f'Resume text:\n{raw_text[:8000]}'
+            )
+            response = await client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[{'role': 'user', 'content': prompt}],
+                temperature=0,
+            )
+            raw_json = response.choices[0].message.content or '{}'
+            # Strip markdown code fences if present
+            raw_json = raw_json.strip()
+            if raw_json.startswith('```'):
+                raw_json = raw_json.split('```')[1]
+                if raw_json.startswith('json'):
+                    raw_json = raw_json[4:]
+            parsed: dict[str, Any] = _json.loads(raw_json.strip())
+            parsed['raw_text_length'] = len(raw_text)
+            parsed['ai_parsed'] = True
+            return parsed
+        except Exception as exc:
+            # Log and fall through to rule-based fallback
+            print(f'[import-resume] LLM extraction failed: {exc}')
+
+    # Rule-based fallback
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    inferred_name = lines[0] if lines else ''
+    inferred_email = next((line for line in lines if '@' in line and ' ' not in line), '')
+    return {
+        'full_name': inferred_name,
+        'email': inferred_email,
+        'summary': raw_text[:1200],
+        'raw_text_length': len(raw_text),
+        'ai_parsed': False,
+    }
+
+
 @app.get('/api/config')
 async def get_config(key: str = Query(default='default')) -> dict[str, Any]:
     cfg = await get_repo().get_config(key)

@@ -65,6 +65,19 @@ export const api = {
     request(`/api/credentials/${domain}/${username}`, { method: 'DELETE' }),
   storeCredential: (body: Record<string, unknown>) =>
     request('/api/credentials', { method: 'POST', body: JSON.stringify(body) }),
+  importResume: (file: File): Promise<Record<string, unknown>> => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return fetch(`${API_BASE}/api/profile/import-resume`, { method: 'POST', body: fd }).then(
+      async (r) => {
+        if (!r.ok) {
+          const text = await r.text()
+          throw new Error(text || `HTTP ${r.status}`)
+        }
+        return r.json()
+      },
+    )
+  },
 }
 
 export function subscribeToRunEvents(

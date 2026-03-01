@@ -1,9 +1,14 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge, Button, Card, Input, PageHeader, TextArea } from '../components/ui'
+import { api } from '../lib/api'
 
 export function ProfilePage({ profile, onSave }: { profile: any; onSave: (payload: Record<string, unknown>) => Promise<void> }) {
   const [form, setForm] = useState<any>(profile ?? {})
   const [saving, setSaving] = useState(false)
+  const [resumeStatus, setResumeStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle')
+  const [resumeFileName, setResumeFileName] = useState('')
+  const [resumeError, setResumeError] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setForm(profile ?? {})
@@ -19,6 +24,20 @@ export function ProfilePage({ profile, onSave }: { profile: any; onSave: (payloa
     ]
     return Math.round((checks.filter(Boolean).length / checks.length) * 100)
   }, [form])
+
+  const handleResumeUpload = async (file: File) => {
+    setResumeFileName(file.name)
+    setResumeStatus('uploading')
+    setResumeError('')
+    try {
+      const extracted = await api.importResume(file)
+      setForm((prev: any) => ({ ...prev, ...extracted }))
+      setResumeStatus('done')
+    } catch (err: any) {
+      setResumeError(err?.message ?? 'Upload failed')
+      setResumeStatus('error')
+    }
+  }
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -43,6 +62,41 @@ export function ProfilePage({ profile, onSave }: { profile: any; onSave: (payloa
         subtitle="Structured profile data used for applications, generated answers, and outbound submissions."
         actions={<Badge tone={completeness >= 80 ? 'success' : 'warning'}>{completeness}% complete</Badge>}
       />
+
+      <Card className="space-y-3">
+        <h2 className="font-display text-xl text-text">Resume</h2>
+        <p className="text-sm text-muted">Upload a PDF resume to auto-fill your profile fields.</p>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) handleResumeUpload(file)
+            e.target.value = ''
+          }}
+        />
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={resumeStatus === 'uploading'}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {resumeStatus === 'uploading' ? 'Parsing…' : 'Upload PDF'}
+          </Button>
+          {resumeStatus === 'uploading' && (
+            <span className="text-sm text-muted">Extracting profile with AI…</span>
+          )}
+          {resumeStatus === 'done' && (
+            <span className="text-sm text-success">Profile filled from {resumeFileName}</span>
+          )}
+          {resumeStatus === 'error' && (
+            <span className="text-sm text-danger">{resumeError}</span>
+          )}
+        </div>
+      </Card>
 
       <Card className="space-y-4">
         <h2 className="font-display text-xl text-text">Identity</h2>
