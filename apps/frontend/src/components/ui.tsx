@@ -38,7 +38,7 @@ export function Button({
   children: ReactNode
   onClick?: (e?: MouseEvent) => void
   disabled?: boolean
-  variant?: 'primary' | 'secondary' | 'ghost' | 'icon' | 'danger'
+  variant?: 'primary' | 'secondary' | 'ghost' | 'icon' | 'danger' | 'attention'
   type?: 'button' | 'submit'
   title?: string
 }) {
@@ -48,6 +48,7 @@ export function Button({
     ghost: 'bg-transparent text-text hover:bg-elevated',
     icon: 'bg-transparent text-text hover:bg-elevated h-9 w-9 p-0',
     danger: 'bg-danger text-white hover:brightness-110',
+    attention: 'bg-accent text-white ring-2 ring-accent/45 shadow-card hover:brightness-110',
   }
 
   return (

@@ -1,4 +1,4 @@
-import type { Application, ManualAction, Run, RunEvent } from '../types'
+import type { Application, ManualAction, Profile, Run, RunEvent } from '../types'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
 
@@ -63,9 +63,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ status: 'resolved', details: { source: 'ui' } }),
     }),
-  getProfile: () => request('/api/profile'),
-  saveProfile: (body: Record<string, unknown>) =>
-    request('/api/profile', { method: 'PUT', body: JSON.stringify(body) }),
+  getProfile: () => request<Profile>('/api/profile'),
+  saveProfile: (body: Profile) =>
+    request<Profile>('/api/profile', { method: 'PUT', body: JSON.stringify(body) }),
   getConfig: () => request('/api/config'),
   putConfig: (value: Record<string, unknown>) =>
     request('/api/config', { method: 'PUT', body: JSON.stringify({ value }) }),
@@ -92,7 +92,7 @@ export const api = {
     request(`/api/credentials/${domain}/${username}`, { method: 'DELETE' }),
   storeCredential: (body: Record<string, unknown>) =>
     request('/api/credentials', { method: 'POST', body: JSON.stringify(body) }),
-  importResume: (file: File): Promise<Record<string, unknown>> => {
+  importResume: (file: File): Promise<Partial<Profile>> => {
     const fd = new FormData()
     fd.append('file', file)
     return fetch(`${API_BASE}/api/profile/import-resume`, { method: 'POST', body: fd }).then(
@@ -105,6 +105,8 @@ export const api = {
       },
     )
   },
+  profilePhotoUrl: (path: string) =>
+    `${API_BASE}/api/profile/photo?path=${encodeURIComponent(path)}`,
 }
 
 export function subscribeToRunEvents(

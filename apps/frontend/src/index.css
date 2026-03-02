@@ -160,6 +160,50 @@ body {
   animation: sidebar-slide 220ms ease-out;
 }
 
+.resume-upload-cta {
+  position: relative;
+  isolation: isolate;
+}
+
+.resume-upload-cta::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 44%, transparent);
+  opacity: 0;
+  animation: resume-cta-ring 2.6s ease-out infinite;
+  pointer-events: none;
+}
+
+.resume-upload-button {
+  animation: resume-button-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes resume-cta-ring {
+  0% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  25% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes resume-button-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 34%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

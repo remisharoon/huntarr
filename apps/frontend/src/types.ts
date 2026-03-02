@@ -75,3 +75,76 @@ export interface ManualAction {
   status: string
   created_at: string
 }
+
+export interface ProfileExperience {
+  title: string
+  company: string
+  start: string
+  end: string
+  description: string
+}
+
+export interface ProfileEducation {
+  degree: string
+  institution: string
+  year: string
+  description: string
+}
+
+export interface ProfileAward {
+  title: string
+  issuer: string
+  year: string
+  description: string
+}
+
+export interface ProfileCertification {
+  name: string
+  issuer: string
+  year: string
+  credential_id: string
+  url: string
+}
+
+export interface ProfileProject {
+  name: string
+  role: string
+  start: string
+  end: string
+  description: string
+  url: string
+  tech_stack: string[]
+}
+
+export interface ProfileLanguage {
+  name: string
+  proficiency: string
+}
+
+export interface ProfileLink {
+  label: string
+  url: string
+}
+
+export interface Profile {
+  id?: string
+  full_name: string
+  email: string
+  phone?: string | null
+  location?: string | null
+  years_experience: number
+  summary: string
+  skills: string[]
+  experience: ProfileExperience[]
+  education: ProfileEducation[]
+  awards: ProfileAward[]
+  certifications: ProfileCertification[]
+  projects: ProfileProject[]
+  languages: ProfileLanguage[]
+  links: ProfileLink[]
+  profile_photo_path?: string | null
+  profile_photo_mime?: string | null
+  preferences: Record<string, unknown>
+  rule_config?: Record<string, unknown>
+  natural_language_override?: string | null
+}

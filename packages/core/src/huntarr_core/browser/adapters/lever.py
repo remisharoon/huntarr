@@ -65,6 +65,18 @@ class LeverAdapter(AtsAdapter):
         await self._upload_file(
             page,
             [
+                "input[type='file'][name*='photo' i]",
+                "input[type='file'][name*='avatar' i]",
+                "input[type='file'][name*='picture' i]",
+                "input[type='file'][name*='headshot' i]",
+                "input[type='file'][id*='photo' i]",
+                "input[type='file'][name*='profile' i]",
+            ],
+            generated_docs.get("profile_photo"),
+        )
+        await self._upload_file(
+            page,
+            [
                 "input[type='file'][name*='cover' i]",
                 "input[type='file'][name='coverLetter']",
             ],

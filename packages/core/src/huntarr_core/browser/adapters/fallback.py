@@ -36,6 +36,7 @@ class FallbackAdapter(AtsAdapter):
 
         resume_path = generated_docs.get("resume_pdf")
         cover_path = generated_docs.get("cover_letter_txt")
+        profile_photo_path = generated_docs.get("profile_photo")
 
         await self._upload_file(
             page,
@@ -45,6 +46,18 @@ class FallbackAdapter(AtsAdapter):
                 "input[type='file']",
             ],
             resume_path,
+        )
+        await self._upload_file(
+            page,
+            [
+                "input[type='file'][name*='photo' i]",
+                "input[type='file'][id*='photo' i]",
+                "input[type='file'][name*='avatar' i]",
+                "input[type='file'][name*='picture' i]",
+                "input[type='file'][name*='headshot' i]",
+                "input[type='file'][name*='profile' i]",
+            ],
+            profile_photo_path,
         )
         await self._upload_file(
             page,

@@ -28,7 +28,7 @@ import { ProfilePage } from './pages/ProfilePage'
 import { RunDetailPage } from './pages/RunDetailPage'
 import { RunsPage } from './pages/RunsPage'
 import { SettingsPage } from './pages/SettingsPage'
-import type { ThemeMode } from './types'
+import type { Profile, ThemeMode } from './types'
 
 type View = 'dashboard' | 'jobs' | 'manual' | 'profile' | 'runs' | 'settings' | 'job-detail' | 'application-detail' | 'run-detail'
 
@@ -65,7 +65,7 @@ export default function App() {
   const [jobs, setJobs] = useState<any[]>([])
   const [applications, setApplications] = useState<any[]>([])
   const [manualActions, setManualActions] = useState<any[]>([])
-  const [profile, setProfile] = useState<any>({})
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
@@ -419,7 +419,15 @@ export default function App() {
               {view === 'dashboard' ? <DashboardPage runs={runs} jobs={jobs} manualActions={manualActions} applications={applications} /> : null}
               {view === 'jobs' ? <JobsPage jobs={jobs} onApplyNow={onApplyNow} onViewJob={onViewJob} /> : null}
               {view === 'manual' ? <ManualQueuePage actions={manualActions} onStart={onStartManual} onResolve={onResolveManual} /> : null}
-              {view === 'profile' ? <ProfilePage profile={profile} onSave={async (payload) => { await api.saveProfile(payload); await refresh() }} /> : null}
+              {view === 'profile' ? (
+                <ProfilePage
+                  profile={profile}
+                  onSave={async (payload) => {
+                    await api.saveProfile(payload)
+                    await refresh()
+                  }}
+                />
+              ) : null}
               {view === 'runs' ? (
                 <RunsPage
                   runs={runs}

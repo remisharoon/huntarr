@@ -295,6 +295,9 @@ class HuntGraphRunner:
             "resume_pdf": str(resume_path),
             "cover_letter_txt": str(cover_path),
         }
+        profile_photo_path = str(profile.get("profile_photo_path") or "").strip()
+        if profile_photo_path and Path(profile_photo_path).exists():
+            state["generated_docs"]["profile_photo"] = profile_photo_path
 
         await self.repo.create_generated_document(
             run_id,
@@ -310,6 +313,14 @@ class HuntGraphRunner:
             str(cover_path),
             {"tailored": True},
         )
+        if state["generated_docs"].get("profile_photo"):
+            await self.repo.create_generated_document(
+                run_id,
+                UUID(str(current_job["id"])),
+                "profile_photo",
+                state["generated_docs"]["profile_photo"],
+                {"source": "resume_import"},
+            )
         await self.repo.insert_run_event(
             run_id,
             "info",

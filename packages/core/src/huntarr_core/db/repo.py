@@ -12,15 +12,20 @@ from huntarr_core.constants import DEFAULT_QUEUE_NAME
 
 _JSON_COLUMNS = {
     "artifacts",
+    "awards",
+    "certifications",
     "details",
     "education",
     "explanation",
+    "languages",
+    "links",
     "meta",
     "metadata",
     "metrics",
     "payload",
     "payload_json",
     "preferences",
+    "projects",
     "raw_json",
     "rule_config",
     "search_config",
@@ -321,7 +326,14 @@ class HuntRepo:
                        skills = $8::jsonb,
                        experience = $9::jsonb,
                        education = $10::jsonb,
-                       preferences = $11::jsonb,
+                       awards = $11::jsonb,
+                       certifications = $12::jsonb,
+                       projects = $13::jsonb,
+                       languages = $14::jsonb,
+                       links = $15::jsonb,
+                       profile_photo_path = $16,
+                       profile_photo_mime = $17,
+                       preferences = $18::jsonb,
                        updated_at = NOW()
                  WHERE id = $1
              RETURNING *
@@ -336,6 +348,13 @@ class HuntRepo:
                 _json_dumps(payload.get("skills", [])),
                 _json_dumps(payload.get("experience", [])),
                 _json_dumps(payload.get("education", [])),
+                _json_dumps(payload.get("awards", [])),
+                _json_dumps(payload.get("certifications", [])),
+                _json_dumps(payload.get("projects", [])),
+                _json_dumps(payload.get("languages", [])),
+                _json_dumps(payload.get("links", [])),
+                payload.get("profile_photo_path"),
+                payload.get("profile_photo_mime"),
                 _json_dumps(payload.get("preferences", {})),
             )
             if row:
@@ -353,8 +372,15 @@ class HuntRepo:
                 skills,
                 experience,
                 education,
+                awards,
+                certifications,
+                projects,
+                languages,
+                links,
+                profile_photo_path,
+                profile_photo_mime,
                 preferences
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb)
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$14::jsonb,$15::jsonb,$16,$17,$18::jsonb)
             RETURNING *
             """,
             payload.get("full_name", ""),
@@ -366,6 +392,13 @@ class HuntRepo:
             _json_dumps(payload.get("skills", [])),
             _json_dumps(payload.get("experience", [])),
             _json_dumps(payload.get("education", [])),
+            _json_dumps(payload.get("awards", [])),
+            _json_dumps(payload.get("certifications", [])),
+            _json_dumps(payload.get("projects", [])),
+            _json_dumps(payload.get("languages", [])),
+            _json_dumps(payload.get("links", [])),
+            payload.get("profile_photo_path"),
+            payload.get("profile_photo_mime"),
             _json_dumps(payload.get("preferences", {})),
         )
         return _normalize_row(row) if row else {}
@@ -1026,6 +1059,13 @@ class HuntRepo:
                 "skills": [],
                 "experience": [],
                 "education": [],
+                "awards": [],
+                "certifications": [],
+                "projects": [],
+                "languages": [],
+                "links": [],
+                "profile_photo_path": None,
+                "profile_photo_mime": None,
                 "preferences": {
                     "locations": ["GCC", "Remote"],
                     "keywords": [],

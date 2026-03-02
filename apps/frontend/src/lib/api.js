@@ -66,6 +66,7 @@ export const api = {
             return r.json();
         });
     },
+    profilePhotoUrl: (path) => `${API_BASE}/api/profile/photo?path=${encodeURIComponent(path)}`,
 };
 export function subscribeToRunEvents(runId, onEvent, onError) {
     const eventSource = new EventSource(`${API_BASE}/api/runs/${runId}/events`);

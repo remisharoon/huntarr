@@ -40,9 +40,15 @@ def profile() -> dict[str, Any]:
 def generated_docs(tmp_path: Path) -> dict[str, str]:
     resume_pdf = tmp_path / "resume.pdf"
     cover_letter = tmp_path / "cover_letter.txt"
+    profile_photo = tmp_path / "profile_photo.jpg"
     resume_pdf.write_bytes(b"%PDF-1.4\n%fixture\n")
     cover_letter.write_text("Fixture cover letter text.", encoding="utf-8")
-    return {"resume_pdf": str(resume_pdf), "cover_letter_txt": str(cover_letter)}
+    profile_photo.write_bytes(b"\xff\xd8\xff\xdb\x00C\x00fixture-jpeg")
+    return {
+        "resume_pdf": str(resume_pdf),
+        "cover_letter_txt": str(cover_letter),
+        "profile_photo": str(profile_photo),
+    }
 
 
 def test_greenhouse_prefill_and_submit(profile: dict[str, Any], generated_docs: dict[str, str]) -> None:
@@ -114,6 +120,7 @@ async def _exercise_greenhouse(profile: dict[str, Any], generated_docs: dict[str
         assert await _input_value(page, "#phone") == profile["phone"]
         assert await _input_value(page, "#address") == profile["location"]
         assert await _input_value(page, "#cover_letter") == profile["summary"]
+        assert await _file_count(page, "input[name='profile_photo']") == 1
         assert await _file_count(page, "input[name='resume']") == 1
         assert await _file_count(page, "input[name='cover_letter']") == 1
 
@@ -137,6 +144,7 @@ async def _exercise_lever(profile: dict[str, Any], generated_docs: dict[str, str
         assert await _input_value(page, "#phone") == profile["phone"]
         assert await _input_value(page, "#location") == profile["location"]
         assert await _input_value(page, "#comments") == profile["summary"]
+        assert await _file_count(page, "input[name='photo']") == 1
         assert await _file_count(page, "input[name='resume']") == 1
         assert await _file_count(page, "input[name='coverLetter']") == 1
 
@@ -160,6 +168,7 @@ async def _exercise_workday(profile: dict[str, Any], generated_docs: dict[str, s
         assert await _input_value(page, "#wd-email") == profile["email"]
         assert await _input_value(page, "#wd-phone") == profile["phone"]
         assert await _input_value(page, "#wd-cover") == profile["summary"]
+        assert await _file_count(page, "#wd-photo") == 1
         assert await _file_count(page, "#wd-resume") == 1
 
         prefill_next = await page.eval_on_selector("body", "el => el.dataset.prefillNext || ''")

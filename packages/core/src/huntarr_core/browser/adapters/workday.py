@@ -74,6 +74,18 @@ class WorkdayAdapter(AtsAdapter):
             ],
             generated_docs.get("resume_pdf"),
         )
+        await self._upload_file(
+            page,
+            [
+                "input[type='file'][data-automation-id*='photo' i]",
+                "input[type='file'][data-automation-id*='avatar' i]",
+                "input[type='file'][name*='photo' i]",
+                "input[type='file'][name*='picture' i]",
+                "input[type='file'][name*='headshot' i]",
+                "input[type='file'][name*='profile' i]",
+            ],
+            generated_docs.get("profile_photo"),
+        )
 
         await self._fill_by_selectors(
             page,

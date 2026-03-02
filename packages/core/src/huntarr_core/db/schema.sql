@@ -11,10 +11,25 @@ CREATE TABLE IF NOT EXISTS profiles (
   skills JSONB NOT NULL DEFAULT '[]'::jsonb,
   experience JSONB NOT NULL DEFAULT '[]'::jsonb,
   education JSONB NOT NULL DEFAULT '[]'::jsonb,
+  awards JSONB NOT NULL DEFAULT '[]'::jsonb,
+  certifications JSONB NOT NULL DEFAULT '[]'::jsonb,
+  projects JSONB NOT NULL DEFAULT '[]'::jsonb,
+  languages JSONB NOT NULL DEFAULT '[]'::jsonb,
+  links JSONB NOT NULL DEFAULT '[]'::jsonb,
+  profile_photo_path TEXT,
+  profile_photo_mime TEXT,
   preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE IF EXISTS profiles ADD COLUMN IF NOT EXISTS awards JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE IF EXISTS profiles ADD COLUMN IF NOT EXISTS certifications JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE IF EXISTS profiles ADD COLUMN IF NOT EXISTS projects JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE IF EXISTS profiles ADD COLUMN IF NOT EXISTS languages JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE IF EXISTS profiles ADD COLUMN IF NOT EXISTS links JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE IF EXISTS profiles ADD COLUMN IF NOT EXISTS profile_photo_path TEXT;
+ALTER TABLE IF EXISTS profiles ADD COLUMN IF NOT EXISTS profile_photo_mime TEXT;
 
 CREATE TABLE IF NOT EXISTS search_preferences (
   profile_id UUID PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
