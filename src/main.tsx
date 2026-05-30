@@ -6,6 +6,7 @@ import {
   SignUp,
   SignedIn,
   SignedOut,
+  UserProfile,
   useAuth,
 } from '@clerk/clerk-react'
 import {
@@ -32,7 +33,20 @@ function AuthenticatedApp() {
   return (
     <>
       <SignedIn>
-        <App />
+        <App authEnabled />
+      </SignedIn>
+      <SignedOut>
+        <Navigate to="/sign-in" replace />
+      </SignedOut>
+    </>
+  )
+}
+
+function AuthenticatedUserProfile() {
+  return (
+    <>
+      <SignedIn>
+        <UserProfile routing="path" path="/user" />
       </SignedIn>
       <SignedOut>
         <Navigate to="/sign-in" replace />
@@ -55,13 +69,14 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               path="/sign-up/*"
               element={<SignUp routing="path" path="/sign-up" signInUrl="/sign-in" forceRedirectUrl="/" />}
             />
+            <Route path="/user/*" element={<AuthenticatedUserProfile />} />
             <Route path="/*" element={<AuthenticatedApp />} />
           </Routes>
         </BrowserRouter>
       </ClerkProvider>
     ) : (
       <BrowserRouter>
-        <App />
+        <App authEnabled={false} />
       </BrowserRouter>
     )}
   </React.StrictMode>,

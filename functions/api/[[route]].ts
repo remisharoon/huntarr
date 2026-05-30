@@ -966,10 +966,6 @@ function dedupeJobs(jobs: NormalizedJobInput[]): NormalizedJobInput[] {
   return [...deduped.values()]
 }
 
-function isSseEventsPath(path: string): boolean {
-  return /^\/api\/runs\/[^/]+\/events$/.test(path)
-}
-
 app.use('/api/*', async (c, next) => {
   const path = c.req.path
   if (path === '/api/health') {
@@ -999,11 +995,6 @@ app.use('/api/*', async (c, next) => {
   }
 
   if (!token) {
-    if (isSseEventsPath(path)) {
-      c.set('userId', DEFAULT_USER_ID)
-      await next()
-      return
-    }
     throw new HTTPException(401, { message: 'Missing bearer token' })
   }
 

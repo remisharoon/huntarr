@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { UserButton } from '@clerk/clerk-react'
 import {
   ArrowLeft,
   Briefcase,
@@ -114,7 +115,11 @@ function getStoredTheme(): ThemeMode {
   return stored === 'dark' || stored === 'light' ? stored : 'system'
 }
 
-export default function App() {
+type AppProps = {
+  authEnabled?: boolean
+}
+
+export default function App({ authEnabled = false }: AppProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const routeState = useMemo(() => resolveRoute(location.pathname), [location.pathname])
@@ -340,6 +345,19 @@ export default function App() {
             </button>
           )
         })}
+        {authEnabled ? (
+          <button
+            type="button"
+            onClick={() => {
+              navigate('/user')
+              if (mobile) setMobileNavOpen(false)
+            }}
+            className="group mt-3 flex w-full items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-gray-600 transition hover:border-gray-200 hover:bg-gray-50 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-gray-300 dark:hover:border-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-100 dark:focus-visible:ring-offset-gray-950"
+          >
+            <UserRound size={17} />
+            <span>Account</span>
+          </button>
+        ) : null}
       </nav>
       <div className="border-t border-gray-200 p-3 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
         <p>Live control plane for runs, jobs, and manual actions.</p>
@@ -424,7 +442,20 @@ export default function App() {
                   Start Hunt
                 </Button>
                 <span className="hidden h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 sm:inline-flex">
-                  <img src="/brand/icon.svg" alt="" aria-hidden className="h-6 w-6 rounded-md" />
+                  {authEnabled ? (
+                    <UserButton
+                      afterSignOutUrl="/sign-in"
+                      userProfileMode="navigation"
+                      userProfileUrl="/user"
+                      appearance={{
+                        elements: {
+                          avatarBox: 'h-6 w-6',
+                        },
+                      }}
+                    />
+                  ) : (
+                    <img src="/brand/icon.svg" alt="" aria-hidden className="h-6 w-6 rounded-md" />
+                  )}
                 </span>
               </div>
             </div>
