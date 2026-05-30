@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { UserButton } from '@clerk/clerk-react'
 import {
+  AlertTriangle,
   ArrowLeft,
   Briefcase,
   Menu,
@@ -18,7 +19,7 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import { Button, Card, IconButton } from './components/ui'
-import { api, formatApiError } from './lib/api'
+import { api, formatApiError, type HuntPreflightResponse } from './lib/api'
 import { ApplicationDetailPage } from './pages/ApplicationDetailPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { JobDetailPage } from './pages/JobDetailPage'
@@ -132,6 +133,7 @@ export default function App({ authEnabled = false }: AppProps) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [huntPreflight, setHuntPreflight] = useState<HuntPreflightResponse | null>(null)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [themeMode, setThemeMode] = useState<ThemeMode>(getStoredTheme)
   const [systemTheme, setSystemTheme] = useState<'dark' | 'light'>(() => {
@@ -160,9 +162,24 @@ export default function App({ authEnabled = false }: AppProps) {
     }
   }
 
+  const loadHuntPreflight = async () => {
+    try {
+      const status = await api.getHuntPreflight()
+      setHuntPreflight(status)
+    } catch {
+      // Keep the last known preflight state if this check fails.
+    }
+  }
+
   useEffect(() => {
     refresh()
     const timer = setInterval(refresh, 8000)
+    return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    loadHuntPreflight()
+    const timer = setInterval(loadHuntPreflight, 60000)
     return () => clearInterval(timer)
   }, [])
 
@@ -194,6 +211,13 @@ export default function App({ authEnabled = false }: AppProps) {
     setBusy(true)
     try {
       setError(null)
+      const preflight = await api.getHuntPreflight()
+      setHuntPreflight(preflight)
+      if (!preflight.can_start) {
+        setError(preflight.blockers.join(' '))
+        return
+      }
+
       const search_config: Record<string, unknown> = {}
 
       if (profile?.desired_job_title) {
@@ -367,7 +391,7 @@ export default function App({ authEnabled = false }: AppProps) {
 
   return (
     <div className="min-h-screen p-3 md:p-5">
-      <div className="mr-auto flex min-h-[calc(100vh-1.5rem)] max-w-7xl gap-4 md:min-h-[calc(100vh-2.5rem)]">
+      <div className="flex w-full min-h-[calc(100vh-1.5rem)] gap-4 md:min-h-[calc(100vh-2.5rem)]">
         <aside className="hidden w-64 shrink-0 self-start rounded-xl border border-gray-200 bg-white shadow-sm md:sticky md:top-5 md:block dark:border-gray-800 dark:bg-gray-950/70">
           <ShellNav />
         </aside>
@@ -463,6 +487,35 @@ export default function App({ authEnabled = false }: AppProps) {
 
           <main className="motion-enter mt-4 flex-1 rounded-xl border border-gray-200 bg-white/80 p-4 shadow-sm md:p-6 dark:border-gray-800 dark:bg-gray-950/60">
             {error ? <Card className="mb-4 border-red-200 text-red-700 dark:border-red-900/50 dark:text-red-300" variant="muted">{error}</Card> : null}
+            {huntPreflight?.blockers?.length ? (
+              <Card className="mb-4 border-red-200 text-red-700 dark:border-red-900/50 dark:text-red-300" variant="muted">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold">Hunt start blocked by required profile fields</p>
+                    <p className="mt-1 text-xs">{huntPreflight.blockers[0]}</p>
+                  </div>
+                </div>
+              </Card>
+            ) : null}
+            {huntPreflight?.warnings?.length ? (
+              <Card className="mb-4 border-yellow-200 text-yellow-700 dark:border-yellow-900/50 dark:text-yellow-300" variant="muted">
+                <div className="flex items-start gap-2">
+                  <ShieldAlert size={16} className="mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold">Configuration warnings detected</p>
+                    <ul className="mt-1 list-disc space-y-1 pl-4 text-xs">
+                      {huntPreflight.warnings.slice(0, 4).map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                    {huntPreflight.warnings.length > 4 ? (
+                      <p className="mt-1 text-xs">+{huntPreflight.warnings.length - 4} more warnings</p>
+                    ) : null}
+                  </div>
+                </div>
+              </Card>
+            ) : null}
 
             {view === 'dashboard' ? <DashboardPage runs={runs} jobs={jobs} manualActions={manualActions} applications={applications} /> : null}
             {view === 'jobs' ? <JobsPage jobs={jobs} counts={jobsCounts} onApplyNow={onApplyNow} onViewJob={onViewJob} onDeleteAll={onDeleteAll} /> : null}
@@ -475,6 +528,7 @@ export default function App({ authEnabled = false }: AppProps) {
                       setError(null)
                       await api.saveProfile(payload)
                       await refresh()
+                      await loadHuntPreflight()
                     } catch (error) {
                       setError(formatApiError(error, 'Failed to save profile'))
                       throw error

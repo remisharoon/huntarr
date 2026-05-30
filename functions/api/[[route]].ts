@@ -174,6 +174,14 @@ type SourceFetchOutcome = {
   warnings: string[]
 }
 
+type HuntPreflightResponse = {
+  can_start: boolean
+  blockers: string[]
+  warnings: string[]
+  missing_profile_fields: string[]
+  checked_at: string
+}
+
 type LLMProviderRecord = {
   id: string
   name: string
@@ -297,6 +305,16 @@ const defaultProfile: ProfileRecord = {
   desired_job_title: null,
   desired_location: null,
   job_sources: { ...DEFAULT_JOB_SOURCES },
+}
+
+const REQUIRED_PROFILE_FIELD_LABELS: Record<string, string> = {
+  full_name: 'full name',
+  email: 'email',
+  phone: 'phone number',
+  summary: 'professional summary',
+  skills: 'skills',
+  experience: 'experience',
+  education: 'education',
 }
 
 class Storage {
@@ -500,6 +518,85 @@ function normalizeText(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
+function compactMessage(value: string, maxLength = 140): string {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  if (normalized.length <= maxLength) {
+    return normalized
+  }
+  return `${normalized.slice(0, maxLength - 3)}...`
+}
+
+function isValidUrl(value: string): boolean {
+  try {
+    const candidate = new URL(value)
+    return candidate.protocol === 'http:' || candidate.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function missingRequiredProfileFields(profile: JsonObject): string[] {
+  const missing: string[] = []
+
+  if (!asString(profile.full_name).trim()) {
+    missing.push('full_name')
+  }
+  if (!asString(profile.email).trim()) {
+    missing.push('email')
+  }
+  if (!asString(profile.phone).trim()) {
+    missing.push('phone')
+  }
+  if (!asString(profile.summary).trim()) {
+    missing.push('summary')
+  }
+
+  const skills = asStringArray(profile.skills)
+  if (!skills.length) {
+    missing.push('skills')
+  }
+
+  const experience = Array.isArray(profile.experience) ? profile.experience : []
+  if (!experience.length) {
+    missing.push('experience')
+  }
+
+  const education = Array.isArray(profile.education) ? profile.education : []
+  if (!education.length) {
+    missing.push('education')
+  }
+
+  return missing
+}
+
+async function probeUrl(
+  url: string,
+  init?: RequestInit,
+  timeoutMs = 5000,
+): Promise<{ reachable: boolean; status: number | null; error: string | null }> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    })
+    return {
+      reachable: true,
+      status: response.status,
+      error: null,
+    }
+  } catch (error) {
+    return {
+      reachable: false,
+      status: null,
+      error: error instanceof Error ? error.message : 'unknown error',
+    }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 function stripHtml(value: string): string {
   return value
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
@@ -641,6 +738,141 @@ async function readCredential(storage: Storage, userId: string, domain: string, 
     username,
     password,
     metadata: asObject(value.metadata),
+  }
+}
+
+async function buildHuntPreflight(
+  storage: Storage,
+  userId: string,
+  options: { includeReachability: boolean } = { includeReachability: true },
+): Promise<HuntPreflightResponse> {
+  const blockers: string[] = []
+  const warnings: string[] = []
+  const seenWarnings = new Set<string>()
+  const pushWarning = (message: string) => {
+    const normalized = message.trim()
+    if (!normalized || seenWarnings.has(normalized)) {
+      return
+    }
+    seenWarnings.add(normalized)
+    warnings.push(normalized)
+  }
+
+  const rawProfile = asObject(await storage.get(userConfigKey(userId, 'profile')))
+  const profile: JsonObject = {
+    ...defaultProfile,
+    ...rawProfile,
+    job_sources: mergeJobSources(defaultProfile.job_sources, rawProfile.job_sources),
+  }
+
+  const missingProfileFields = missingRequiredProfileFields(profile)
+  if (missingProfileFields.length) {
+    const labels = missingProfileFields.map((field) => REQUIRED_PROFILE_FIELD_LABELS[field] || field)
+    blockers.push(`Profile is incomplete. Fill required fields: ${labels.join(', ')}.`)
+  }
+
+  const config = asObject(await storage.get(userConfigKey(userId, 'default')))
+  const sessionUrl = asString(config.session_url).trim()
+  if (sessionUrl) {
+    if (!isValidUrl(sessionUrl)) {
+      pushWarning('Session URL is invalid. Set a valid http(s) URL in Settings.')
+    } else if (options.includeReachability) {
+      const probe = await probeUrl(sessionUrl, undefined, 5000)
+      if (!probe.reachable) {
+        pushWarning(`Session URL is unreachable: ${compactMessage(probe.error || 'network error')}.`)
+      } else if (probe.status && probe.status >= 400) {
+        pushWarning(`Session URL returned HTTP ${probe.status}. Check that the URL is correct and reachable.`)
+      }
+    }
+  }
+
+  const providers = await listCollection<LLMProviderRecord>(storage, userId, 'llm-provider')
+  const activeProviderId = asString(await storage.get(userConfigKey(userId, 'llm_active_provider_id'))).trim()
+  const activeProvider = activeProviderId
+    ? providers.find((provider) => provider.id === activeProviderId) || null
+    : null
+
+  if (!providers.length) {
+    pushWarning('No LLM provider is configured. Add one in Settings.')
+  } else if (!activeProvider) {
+    pushWarning('No active LLM provider selected. Set an active provider in Settings.')
+  } else {
+    const baseUrl = asString(activeProvider.base_url).trim()
+    const model = asString(activeProvider.model).trim()
+    const providerApiKey = asString(activeProvider.api_key).trim()
+
+    if (!baseUrl || !isValidUrl(baseUrl)) {
+      pushWarning('Active LLM provider base URL is missing or invalid.')
+    }
+    if (!model) {
+      pushWarning('Active LLM provider model is missing.')
+    }
+    if (!providerApiKey) {
+      pushWarning('Active LLM provider API key is missing.')
+    }
+
+    if (options.includeReachability && baseUrl && isValidUrl(baseUrl)) {
+      const normalizedBaseUrl = baseUrl.replace(/\/+$/, '')
+      const headers: Record<string, string> = { Accept: 'application/json' }
+      if (providerApiKey) {
+        headers.Authorization = `Bearer ${providerApiKey}`
+      }
+      const probe = await probeUrl(`${normalizedBaseUrl}/models`, { method: 'GET', headers }, 6000)
+      if (!probe.reachable) {
+        pushWarning(`Active LLM provider endpoint is unreachable: ${compactMessage(probe.error || 'network error')}.`)
+      } else if (probe.status === 401 || probe.status === 403) {
+        pushWarning('Active LLM provider API key appears invalid (unauthorized response).')
+      } else if (probe.status && probe.status >= 500) {
+        pushWarning(`Active LLM provider endpoint returned HTTP ${probe.status}.`)
+      } else if (probe.status && probe.status >= 400) {
+        pushWarning(`Active LLM provider endpoint returned HTTP ${probe.status}. Check provider base URL and model compatibility.`)
+      }
+    }
+  }
+
+  const profileSources = mergeJobSources(defaultProfile.job_sources, profile.job_sources)
+  const enabledSources = Object.entries(profileSources)
+    .filter(([sourceId, enabled]) => Boolean(enabled) && KNOWN_SOURCE_IDS.has(sourceId))
+    .map(([sourceId]) => sourceId)
+
+  if (!enabledSources.length) {
+    pushWarning('No job sources are enabled. Enable at least one source in Settings.')
+  }
+
+  if (enabledSources.includes('adzuna')) {
+    const adzunaCred = await readCredential(storage, userId, 'adzuna.com')
+    if (!adzunaCred) {
+      pushWarning('Adzuna is enabled but app key is missing in Settings.')
+    } else if (!asString(adzunaCred.metadata.app_id).trim()) {
+      pushWarning('Adzuna is enabled but app ID metadata is missing in Settings.')
+    }
+  }
+
+  if (enabledSources.includes('usajobs')) {
+    const usajobsCred = await readCredential(storage, userId, 'usajobs.gov')
+    if (!usajobsCred) {
+      pushWarning('USAJobs is enabled but API key is missing in Settings.')
+    } else if (!asString(usajobsCred.metadata.user_agent).trim()) {
+      pushWarning('USAJobs is enabled but User-Agent metadata is missing in Settings.')
+    }
+  }
+
+  const steelCred = await readCredential(storage, userId, 'steel.dev')
+  if (!steelCred) {
+    pushWarning('Steel API key is not set. Browser automation steps may fail.')
+  } else if (options.includeReachability) {
+    const probe = await probeUrl('https://api.steel.dev/v1/sessions', { method: 'OPTIONS' }, 5000)
+    if (!probe.reachable) {
+      pushWarning(`Steel API endpoint is unreachable: ${compactMessage(probe.error || 'network error')}.`)
+    }
+  }
+
+  return {
+    can_start: blockers.length === 0,
+    blockers,
+    warnings,
+    missing_profile_fields: missingProfileFields,
+    checked_at: nowIso(),
   }
 }
 
@@ -1418,6 +1650,13 @@ app.get('/api/runs', async (c) => {
   })
 })
 
+app.get('/api/runs/preflight', async (c) => {
+  const userId = c.get('userId')
+  const storage = storageFor(c)
+  const preflight = await buildHuntPreflight(storage, userId, { includeReachability: true })
+  return c.json(preflight)
+})
+
 app.get('/api/runs/:id', async (c) => {
   const userId = c.get('userId')
   const runId = c.req.param('id')
@@ -1431,6 +1670,14 @@ app.get('/api/runs/:id', async (c) => {
 
 app.post('/api/runs', async (c) => {
   const userId = c.get('userId')
+  const storage = storageFor(c)
+  const preflight = await buildHuntPreflight(storage, userId, { includeReachability: false })
+  if (!preflight.can_start) {
+    throw new HTTPException(400, {
+      message: preflight.blockers.join(' '),
+    })
+  }
+
   const body = await c.req.json<{ mode?: RunMode; search_config?: JsonObject }>()
   const now = nowIso()
   const run: RunRecord = {
@@ -1453,7 +1700,6 @@ app.post('/api/runs', async (c) => {
     completed_at: null,
   }
 
-  const storage = storageFor(c)
   await putCollectionItem(storage, userId, 'run', run.id, run)
 
   await appendRunEvent(storage, userId, run.id, {

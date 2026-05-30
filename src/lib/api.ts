@@ -26,6 +26,14 @@ export type LLMProviderListResponse = {
   items: LLMProviderSummary[]
 }
 
+export type HuntPreflightResponse = {
+  can_start: boolean
+  blockers: string[]
+  warnings: string[]
+  missing_profile_fields: string[]
+  checked_at: string
+}
+
 type ApiErrorInit = {
   message: string
   status: number
@@ -192,6 +200,7 @@ export const api = {
     })),
   createRun: (body: Record<string, unknown>) =>
     request('/api/runs', { method: 'POST', body: JSON.stringify(body) }),
+  getHuntPreflight: () => request<HuntPreflightResponse>('/api/runs/preflight'),
   pauseRun: (id: string) => request(`/api/runs/${id}/pause`, { method: 'POST' }),
   resumeRun: (id: string) => request(`/api/runs/${id}/resume`, { method: 'POST' }),
   listJobs: () =>
