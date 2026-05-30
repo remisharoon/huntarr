@@ -318,8 +318,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen p-3 md:p-5">
-      <div className="mx-auto flex min-h-[calc(100vh-1.5rem)] max-w-7xl gap-4 md:min-h-[calc(100vh-2.5rem)]">
-        <aside className="hidden w-64 shrink-0 rounded-xl border border-gray-200 bg-white shadow-sm md:block dark:border-gray-800 dark:bg-gray-950/70">
+      <div className="mr-auto flex min-h-[calc(100vh-1.5rem)] max-w-7xl gap-4 md:min-h-[calc(100vh-2.5rem)]">
+        <aside className="hidden w-64 shrink-0 self-start rounded-xl border border-gray-200 bg-white shadow-sm md:sticky md:top-5 md:block dark:border-gray-800 dark:bg-gray-950/70">
           <ShellNav />
         </aside>
 

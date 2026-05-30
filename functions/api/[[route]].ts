@@ -263,8 +263,13 @@ class Storage {
 
   constructor(databaseUrl?: string) {
     if (databaseUrl && databaseUrl.trim()) {
-      this.sql = neon(databaseUrl)
-      this.mode = 'neon'
+      try {
+        this.sql = neon(databaseUrl)
+        this.mode = 'neon'
+      } catch {
+        this.sql = null
+        this.mode = 'memory'
+      }
     } else {
       this.sql = null
       this.mode = 'memory'
