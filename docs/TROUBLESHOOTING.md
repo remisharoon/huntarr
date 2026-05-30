@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-description: Common issues for Huntarr Cloudflare Pages migration.
+description: Common issues for Huntarr Cloudflare Pages deployment.
 ---
 
 # Troubleshooting
@@ -51,7 +51,6 @@ Checks:
 Run:
 
 ```bash
-cd apps/frontend
 npm install
 npm run build
 ```
@@ -60,6 +59,6 @@ If lockfile drift exists, reinstall dependencies and rebuild.
 
 ## Legacy API Endpoints Missing
 
-The migration currently implements core cloud endpoints (`health`, `config`, `credentials`, `byok/steel/session`).
+The current app implements core cloud endpoints (`health`, `config`, `credentials`, `byok/steel/session`).
 
-If the UI still calls legacy endpoints, finish migration of remaining routes in `apps/frontend/functions/api/[[route]].ts`.
+If your UI requires additional routes, implement them in `functions/api/[[route]].ts`.

@@ -17,10 +17,10 @@ Browser (React + Clerk + Router)
 
 ## Components
 
-- **Frontend**: React + Vite + Tailwind in `apps/frontend/src`
+- **Frontend**: React + Vite + Tailwind in `src`
 - **Auth**: Clerk in browser; token verified in Pages Functions
-- **API**: Hono routes in `apps/frontend/functions/api/[[route]].ts`
-- **DB**: Neon PostgreSQL (`configs` currently used for migration-safe storage)
+- **API**: Hono routes in `functions/api/[[route]].ts`
+- **DB**: Neon PostgreSQL (`configs` table for user-scoped settings and credentials)
 - **AI**: OpenRouter with user-provided API keys
 - **Automation**: Steel.dev with user-provided API keys
 
@@ -49,4 +49,4 @@ Frontend now uses URL routes instead of local view-only state:
 
 - Cloudflare-ready frontend and function scaffold: done
 - BYOK OpenRouter/Steel settings and tests: done
-- Full legacy endpoint parity (runs/jobs/profile/etc.): in progress
+- Full cloud endpoint parity (runs/jobs/profile/etc.): in progress

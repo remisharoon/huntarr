@@ -1,23 +1,33 @@
 # Deployment Guide
 
-This project is migrating to Cloudflare Pages deployment for the web app.
+This project deploys to Cloudflare Pages.
 
 ## Current Recommended Deployment
 
-- Frontend + Functions: Cloudflare Pages (`apps/frontend`)
+- Frontend + Functions: Cloudflare Pages (repo root)
 - Database: Neon PostgreSQL
 - Auth: Clerk
 
 ## Primary Setup Docs
 
-- `apps/frontend/CLOUDFLARE_SETUP.md`
+- `CLOUDFLARE_SETUP.md`
 - `docs/CLOUDFLARE_PAGES.md`
 
 ## Cloudflare Pages Build Settings
 
-- Root directory: `apps/frontend`
+- Root directory: `/` (repository root)
 - Build command: `npm run build`
 - Output directory: `dist`
+
+## CLI Deploy
+
+You can deploy from your machine with:
+
+```bash
+npm run deploy
+```
+
+This runs a production build and deploys `dist` to project `huntarr-web`.
 
 ## Required Runtime Variables
 

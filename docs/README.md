@@ -1,6 +1,6 @@
 # Huntarr Documentation
 
-Cloud-first documentation for the Huntarr migration.
+Cloud-first documentation for the Huntarr React app.
 
 ## Quick Links
 

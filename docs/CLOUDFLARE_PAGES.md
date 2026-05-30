@@ -9,8 +9,8 @@ description: Deploy Huntarr frontend and Pages Functions to Cloudflare with Neon
 
 Huntarr deploys as:
 
-- Static frontend from `apps/frontend/dist`
-- API from `apps/frontend/functions/api/[[route]].ts`
+- Static frontend from `dist`
+- API from `functions/api/[[route]].ts`
 - NeonDB for storage
 - Clerk for auth
 
@@ -33,7 +33,7 @@ Huntarr deploys as:
 ## Deploy Steps
 
 1. Connect repository to Cloudflare Pages.
-2. Set project root to `apps/frontend`.
+2. Set project root to `/` (repository root).
 3. Build command: `npm run build`.
 4. Build output directory: `dist`.
 5. Add env vars and secrets above.
@@ -42,7 +42,6 @@ Huntarr deploys as:
 ## Auth Notes
 
 - Pages Functions expect a Clerk bearer token.
-- Local fallback exists via `x-dev-user-id` only when Clerk vars are not set.
 
 ## BYOK Notes
 

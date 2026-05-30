@@ -24,8 +24,8 @@ Huntarr is moving to a cloud-first architecture focused on:
 
 ## Migration Notes
 
-- The repo still contains legacy Python API/worker code while migration is in progress.
-- New Cloudflare-ready frontend setup lives in `apps/frontend/`.
+- This repo is now React-first and Cloudflare Pages-first.
+- Core app code lives at repo root in `src/` and `functions/`.
 - BYOK policy is used for both OpenRouter and Steel.dev.
 
 ## Reference

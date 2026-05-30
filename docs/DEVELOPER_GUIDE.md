@@ -1,18 +1,17 @@
 ---
 title: Developer Guide
-description: Contributing guide for Huntarr cloud migration stack.
+description: Contributing guide for Huntarr cloud stack.
 ---
 
 # Developer Guide
 
 ## Scope
 
-This guide targets the new cloud stack in `apps/frontend`.
+This guide targets the cloud stack in this repository.
 
 ## Local Development
 
 ```bash
-cd apps/frontend
 npm install
 cp .env.example .env
 npm run dev
@@ -21,16 +20,15 @@ npm run dev
 ## Build
 
 ```bash
-cd apps/frontend
 npm run build
 ```
 
 ## Key Directories
 
-- `apps/frontend/src` - UI, routing, client API
-- `apps/frontend/functions` - Cloudflare Pages Functions API
-- `apps/frontend/wrangler.toml` - Cloudflare config
-- `apps/frontend/CLOUDFLARE_SETUP.md` - deployment runbook
+- `src` - UI, routing, client API
+- `functions` - Cloudflare Pages Functions API
+- `wrangler.toml` - Cloudflare config
+- `CLOUDFLARE_SETUP.md` - deployment runbook
 
 ## Auth + API Flow
 
@@ -43,14 +41,14 @@ npm run build
 
 - OpenRouter key and Steel key are stored as user credentials.
 - Test paths are available in Settings UI.
-- Use migration-safe keys in `configs` table during transition.
+- Use user-scoped keys in the `configs` table.
 
 ## Coding Notes
 
-- Prefer TypeScript changes under `apps/frontend/src/*.ts(x)`.
+- Prefer TypeScript changes under `src/*.ts(x)`.
 - Keep endpoints user-scoped.
 - Avoid introducing shared server keys for AI/automation providers.
 
-## Migration Note
+## Project Direction
 
-Legacy Python code remains in repo, but cloud work should be implemented in `apps/frontend` and `apps/frontend/functions`.
+This repository is React-first and Cloudflare Pages-first.

@@ -18,7 +18,6 @@ This quick start targets the new cloud architecture.
 ## 1) Run Frontend Locally
 
 ```bash
-cd apps/frontend
 cp .env.example .env
 npm install
 npm run dev
@@ -28,7 +27,7 @@ Open `http://localhost:5173`.
 
 ## 2) Configure Frontend Env
 
-Set these values in `apps/frontend/.env`:
+Set these values in `.env`:
 
 ```bash
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
@@ -45,7 +44,7 @@ VITE_API_BASE=
 
 ## 4) Configure Cloudflare Pages
 
-Use `apps/frontend/wrangler.toml` and set variables/secrets:
+Use `wrangler.toml` and set variables/secrets:
 
 - Variable: `VITE_CLERK_PUBLISHABLE_KEY`
 - Variable: `CLERK_JWKS_URL`
@@ -63,8 +62,13 @@ After signing in:
 ## 6) Build Check
 
 ```bash
-cd apps/frontend
 npm run build
+```
+
+## 7) Deploy
+
+```bash
+npm run deploy
 ```
 
 ## Next

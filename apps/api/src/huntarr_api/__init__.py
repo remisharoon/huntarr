@@ -1,1 +1,0 @@
-"""Huntarr API service."""

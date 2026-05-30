@@ -1,6 +1,6 @@
 ---
 title: API Reference
-description: Cloudflare Pages Functions API reference for Huntarr migration.
+description: Cloudflare Pages Functions API reference for Huntarr.
 ---
 
 # API Reference
@@ -101,5 +101,5 @@ Response:
 
 ## Notes
 
-- This reference reflects the migration-phase Pages Functions currently implemented.
-- Additional legacy-equivalent endpoints will be added as migration continues.
+- This reference covers the currently implemented Pages Functions endpoints.
+- Add additional routes in `functions/api/[[route]].ts` as needed.

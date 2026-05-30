@@ -1,12 +1,9 @@
 node_modules
-__pycache__
-*.pyc
 .env
 .DS_Store
-.pytest_cache
-.mypy_cache
 coverage
-apps/frontend/dist
-apps/frontend/.vite
-artifacts
-uploads
+dist
+.vite
+site
+tsconfig.tsbuildinfo
+*.log

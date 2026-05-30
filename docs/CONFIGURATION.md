@@ -5,7 +5,7 @@ description: Environment and runtime configuration for Huntarr Cloudflare Pages 
 
 # Configuration
 
-## Frontend (`apps/frontend/.env`)
+## Frontend (`.env`)
 
 | Variable | Required | Description |
 |---|---|---|
@@ -43,10 +43,10 @@ Keys are configured from Settings and stored per-user via API.
 
 ## Data Storage
 
-Current cloud migration stores user-scoped config and credentials in the `configs` table using key prefixes.
+The app stores user-scoped config and credentials in the `configs` table using key prefixes.
 
 ## Files
 
-- `apps/frontend/.env.example`
-- `apps/frontend/wrangler.toml`
-- `apps/frontend/CLOUDFLARE_SETUP.md`
+- `.env.example`
+- `wrangler.toml`
+- `CLOUDFLARE_SETUP.md`

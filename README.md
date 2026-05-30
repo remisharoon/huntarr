@@ -2,7 +2,7 @@
 
 Automated job research and application assistant.
 
-Huntarr is migrating from a Python worker stack to a Cloudflare Pages web app with NeonDB, Clerk auth, and BYOK providers.
+Huntarr is a React-first web app for Cloudflare Pages with NeonDB, Clerk auth, and BYOK providers.
 
 ## Documentation
 
@@ -26,7 +26,6 @@ Huntarr is migrating from a Python worker stack to a Cloudflare Pages web app wi
 ## Local Frontend Quick Start
 
 ```bash
-cd apps/frontend
 cp .env.example .env
 npm install
 npm run dev
@@ -34,13 +33,18 @@ npm run dev
 
 Then open `http://localhost:5173`.
 
+## Scripts
+
+```bash
+npm run dev        # Local Vite development server
+npm run build      # Typecheck + production build
+npm run preview    # Preview production bundle locally
+npm run deploy     # Build and deploy to Cloudflare Pages
+```
+
 ## Cloudflare Deployment
 
-See `apps/frontend/CLOUDFLARE_SETUP.md` and `docs/CLOUDFLARE_PAGES.md`.
-
-## Legacy Stack
-
-The previous Docker/FastAPI/worker stack remains in the repo during migration. It is documented for reference but is no longer the target architecture.
+See `CLOUDFLARE_SETUP.md` and `docs/CLOUDFLARE_PAGES.md`.
 
 ## License
 
