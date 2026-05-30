@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { Check, Pencil, Plus, Trash2 } from 'lucide-react'
 
-import { api, type LLMProviderSummary } from '../lib/api'
+import { api, formatApiError, type LLMProviderSummary } from '../lib/api'
 import { Badge, Button, Card, Input, PageHeader, TextArea } from '../components/ui'
 import type { Profile } from '../types'
 
@@ -57,6 +57,8 @@ function normalizeProfileForSettings(profile: Profile | null): Profile | null {
 }
 
 export function SettingsPage() {
+  type MessageTone = 'info' | 'danger'
+
   const [config, setConfig] = useState<any>({})
   const [credentials, setCredentials] = useState<any[]>([])
   const [schedules, setSchedules] = useState<any[]>([])
@@ -66,6 +68,7 @@ export function SettingsPage() {
   const [jobSources, setJobSources] = useState<JobSources>({ ...defaultJobSources })
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [messageTone, setMessageTone] = useState<MessageTone>('info')
 
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
   const [providerForm, setProviderForm] = useState({ ...defaultProviderForm })
@@ -77,8 +80,14 @@ export function SettingsPage() {
   const [steelProjectId, setSteelProjectId] = useState('')
 
   const flashMessage = (text: string) => {
+    setMessageTone('info')
     setMessage(text)
     setTimeout(() => setMessage(null), 2500)
+  }
+
+  const showErrorMessage = (text: string) => {
+    setMessageTone('danger')
+    setMessage(text)
   }
 
   const resetProviderForm = () => {
@@ -118,8 +127,8 @@ export function SettingsPage() {
 
       setOpenRouterModel((configRes as any)?.value?.openrouter_model || 'openai/gpt-4o-mini')
       setSteelProjectId((configRes as any)?.value?.steel_project_id || '')
-    } catch (err: any) {
-      setMessage(`Error loading settings: ${err.message}`)
+    } catch (error) {
+      showErrorMessage(formatApiError(error, 'Error loading settings'))
     }
   }
 
@@ -134,8 +143,8 @@ export function SettingsPage() {
       await api.putConfig(nextValue)
       setConfig(nextValue)
       flashMessage('Settings saved successfully')
-    } catch (err: any) {
-      setMessage(`Error saving settings: ${err.message}`)
+    } catch (error) {
+      showErrorMessage(formatApiError(error, 'Error saving settings'))
     } finally {
       setBusy(false)
     }
@@ -153,7 +162,7 @@ export function SettingsPage() {
       setProfile(updatedProfile)
       flashMessage('Job sources updated successfully')
     } catch (err: any) {
-      setMessage(`Error updating job sources: ${err.message}`)
+      showErrorMessage(formatApiError(err, 'Error updating job sources'))
     } finally {
       setBusy(false)
     }
@@ -176,7 +185,7 @@ export function SettingsPage() {
     const model = providerForm.model.trim()
     const apiKey = providerForm.api_key.trim()
     if (!name || !baseUrl || !model) {
-      setMessage('Provider name, base URL, and model are required')
+      showErrorMessage('Provider name, base URL, and model are required')
       return
     }
 
@@ -200,8 +209,8 @@ export function SettingsPage() {
       }
       resetProviderForm()
       await loadData()
-    } catch (err: any) {
-      setMessage(`Error saving provider: ${err.message}`)
+    } catch (error) {
+      showErrorMessage(formatApiError(error, 'Error saving provider'))
     } finally {
       setBusy(false)
     }
@@ -213,11 +222,11 @@ export function SettingsPage() {
     const model = providerForm.model.trim()
     const apiKey = providerForm.api_key.trim()
     if (!name || !baseUrl || !model) {
-      setMessage('Provider name, base URL, and model are required for test')
+      showErrorMessage('Provider name, base URL, and model are required for test')
       return
     }
     if (!editingProviderId && !apiKey) {
-      setMessage('API key is required to test an unsaved provider')
+      showErrorMessage('API key is required to test an unsaved provider')
       return
     }
 
@@ -236,8 +245,8 @@ export function SettingsPage() {
     try {
       const result = await api.testLLMProvider(payload)
       flashMessage((result as any).message || 'Provider test succeeded')
-    } catch (err: any) {
-      setMessage(`Provider test failed: ${err.message}`)
+    } catch (error) {
+      showErrorMessage(formatApiError(error, 'Provider test failed'))
     } finally {
       setBusy(false)
     }
@@ -248,8 +257,8 @@ export function SettingsPage() {
     try {
       const result = await api.testLLMProvider({ provider_id: providerId })
       flashMessage((result as any).message || 'Provider test succeeded')
-    } catch (err: any) {
-      setMessage(`Provider test failed: ${err.message}`)
+    } catch (error) {
+      showErrorMessage(formatApiError(error, 'Provider test failed'))
     } finally {
       setBusy(false)
     }
@@ -261,8 +270,8 @@ export function SettingsPage() {
       await api.activateLLMProvider(providerId)
       await loadData()
       flashMessage('Active provider updated')
-    } catch (err: any) {
-      setMessage(`Error setting active provider: ${err.message}`)
+    } catch (error) {
+      showErrorMessage(formatApiError(error, 'Error setting active provider'))
     } finally {
       setBusy(false)
     }
@@ -278,8 +287,8 @@ export function SettingsPage() {
       }
       await loadData()
       flashMessage('Provider deleted successfully')
-    } catch (err: any) {
-      setMessage(`Error deleting provider: ${err.message}`)
+    } catch (error) {
+      showErrorMessage(formatApiError(error, 'Error deleting provider'))
     } finally {
       setBusy(false)
     }
@@ -288,7 +297,7 @@ export function SettingsPage() {
   const addCredential = async (event: FormEvent) => {
     event.preventDefault()
     if (!newCredential.domain || !newCredential.username || !newCredential.password) {
-      setMessage('Please fill in all credential fields')
+      showErrorMessage('Please fill in all credential fields')
       return
     }
 
@@ -298,8 +307,8 @@ export function SettingsPage() {
       setNewCredential({ domain: '', username: '', password: '' })
       await loadData()
       flashMessage('Credential added successfully')
-    } catch (err: any) {
-      setMessage(`Error adding credential: ${err.message}`)
+    } catch (error) {
+      showErrorMessage(formatApiError(error, 'Error adding credential'))
     } finally {
       setBusy(false)
     }
@@ -313,8 +322,8 @@ export function SettingsPage() {
       await api.deleteCredential(domain, username)
       await loadData()
       flashMessage('Credential deleted successfully')
-    } catch (err: any) {
-      setMessage(`Error deleting credential: ${err.message}`)
+    } catch (error) {
+      showErrorMessage(formatApiError(error, 'Error deleting credential'))
     } finally {
       setBusy(false)
     }
@@ -323,7 +332,7 @@ export function SettingsPage() {
   const addSchedule = async (event: FormEvent) => {
     event.preventDefault()
     if (!newSchedule.name || !newSchedule.cron_expr) {
-      setMessage('Schedule name and cron expression are required')
+      showErrorMessage('Schedule name and cron expression are required')
       return
     }
 
@@ -331,7 +340,7 @@ export function SettingsPage() {
     try {
       payload = JSON.parse(newSchedule.payload)
     } catch {
-      setMessage('Invalid JSON in schedule payload')
+      showErrorMessage('Invalid JSON in schedule payload')
       return
     }
 
@@ -341,8 +350,8 @@ export function SettingsPage() {
       setNewSchedule({ name: '', cron_expr: '', timezone: 'UTC', payload: '{}' })
       await loadData()
       flashMessage('Schedule created successfully')
-    } catch (err: any) {
-      setMessage(`Error creating schedule: ${err.message}`)
+    } catch (error) {
+      showErrorMessage(formatApiError(error, 'Error creating schedule'))
     } finally {
       setBusy(false)
     }
@@ -356,8 +365,8 @@ export function SettingsPage() {
       await api.deleteSchedule(id)
       await loadData()
       flashMessage('Schedule deleted successfully')
-    } catch (err: any) {
-      setMessage(`Error deleting schedule: ${err.message}`)
+    } catch (error) {
+      showErrorMessage(formatApiError(error, 'Error deleting schedule'))
     } finally {
       setBusy(false)
     }
@@ -391,8 +400,8 @@ export function SettingsPage() {
 
       flashMessage('BYOK settings saved')
       await loadData()
-    } catch (err: any) {
-      setMessage(`Failed to save BYOK settings: ${err.message}`)
+    } catch (error) {
+      showErrorMessage(formatApiError(error, 'Failed to save BYOK settings'))
     } finally {
       setBusy(false)
     }
@@ -400,7 +409,7 @@ export function SettingsPage() {
 
   const testOpenRouterKey = async () => {
     if (!openRouterApiKey.trim()) {
-      setMessage('OpenRouter API key is required')
+      showErrorMessage('OpenRouter API key is required')
       return
     }
     setBusy(true)
@@ -425,8 +434,8 @@ export function SettingsPage() {
       }
 
       flashMessage('OpenRouter key test succeeded')
-    } catch (err: any) {
-      setMessage(`OpenRouter test failed: ${err.message}`)
+    } catch (error) {
+      showErrorMessage(formatApiError(error, 'OpenRouter test failed'))
     } finally {
       setBusy(false)
     }
@@ -434,7 +443,7 @@ export function SettingsPage() {
 
   const testSteelKey = async () => {
     if (!steelApiKey.trim()) {
-      setMessage('Steel API key is required')
+      showErrorMessage('Steel API key is required')
       return
     }
 
@@ -446,8 +455,8 @@ export function SettingsPage() {
         metadata: { source: 'huntarr-settings-test' },
       })
       flashMessage((result as any).message || 'Steel key test succeeded')
-    } catch (err: any) {
-      setMessage(`Steel test failed: ${err.message}`)
+    } catch (error) {
+      showErrorMessage(formatApiError(error, 'Steel test failed'))
     } finally {
       setBusy(false)
     }
@@ -461,7 +470,18 @@ export function SettingsPage() {
         actions={<Badge tone={busy ? 'warning' : 'success'}>{busy ? 'Processing' : 'Ready'}</Badge>}
       />
 
-      {message ? <Card variant="muted" className="border-blue-200 text-blue-700 dark:border-blue-900/50 dark:text-blue-300">{message}</Card> : null}
+      {message ? (
+        <Card
+          variant="muted"
+          className={
+            messageTone === 'danger'
+              ? 'border-red-200 text-red-700 dark:border-red-900/50 dark:text-red-300'
+              : 'border-blue-200 text-blue-700 dark:border-blue-900/50 dark:text-blue-300'
+          }
+        >
+          {message}
+        </Card>
+      ) : null}
 
       <Card className="space-y-4">
         <div className="flex items-center justify-between">

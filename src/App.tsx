@@ -17,7 +17,7 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import { Button, Card, IconButton } from './components/ui'
-import { api } from './lib/api'
+import { api, formatApiError } from './lib/api'
 import { ApplicationDetailPage } from './pages/ApplicationDetailPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { JobDetailPage } from './pages/JobDetailPage'
@@ -150,8 +150,8 @@ export default function App() {
       setApplications(appRes.items)
       setManualActions(manualRes.items)
       setProfile(profileRes)
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to load data')
+    } catch (error) {
+      setError(formatApiError(error, 'Failed to load required backend data'))
     }
   }
 
@@ -188,6 +188,7 @@ export default function App() {
   const startHunt = async () => {
     setBusy(true)
     try {
+      setError(null)
       const search_config: Record<string, unknown> = {}
 
       if (profile?.desired_job_title) {
@@ -211,43 +212,72 @@ export default function App() {
       await api.createRun({ mode: 'manual', search_config })
       await refresh()
       navigate('/runs')
+    } catch (error) {
+      setError(formatApiError(error, 'Failed to start hunt'))
     } finally {
       setBusy(false)
     }
   }
 
   const onApplyNow = async (jobId: string) => {
-    await api.applyNow(jobId)
-    await refresh()
+    try {
+      setError(null)
+      await api.applyNow(jobId)
+      await refresh()
+    } catch (error) {
+      setError(formatApiError(error, 'Failed to apply now'))
+    }
   }
 
   const onDeleteAll = async () => {
     try {
       await api.deleteJobs()
       await refresh()
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to delete jobs')
+    } catch (error) {
+      setError(formatApiError(error, 'Failed to delete jobs'))
     }
   }
 
   const onStartManual = async (id: string) => {
-    await api.startManualSession(id)
-    await refresh()
+    try {
+      setError(null)
+      await api.startManualSession(id)
+      await refresh()
+    } catch (error) {
+      setError(formatApiError(error, 'Failed to start manual session'))
+    }
   }
 
   const onResolveManual = async (id: string) => {
-    await api.resolveManualAction(id)
-    await refresh()
+    try {
+      setError(null)
+      await api.resolveManualAction(id)
+      await refresh()
+    } catch (error) {
+      setError(formatApiError(error, 'Failed to resolve manual action'))
+    }
   }
 
   const onPauseRun = async (id: string) => {
-    await api.pauseRun(id)
-    await refresh()
+    try {
+      setError(null)
+      await api.pauseRun(id)
+      await refresh()
+    } catch (error) {
+      setError(formatApiError(error, 'Failed to pause run'))
+      throw error
+    }
   }
 
   const onResumeRun = async (id: string) => {
-    await api.resumeRun(id)
-    await refresh()
+    try {
+      setError(null)
+      await api.resumeRun(id)
+      await refresh()
+    } catch (error) {
+      setError(formatApiError(error, 'Failed to resume run'))
+      throw error
+    }
   }
 
   const onViewJob = (jobId: string) => {
@@ -407,13 +437,19 @@ export default function App() {
             {view === 'jobs' ? <JobsPage jobs={jobs} counts={jobsCounts} onApplyNow={onApplyNow} onViewJob={onViewJob} onDeleteAll={onDeleteAll} /> : null}
             {view === 'manual' ? <ManualQueuePage actions={manualActions} onStart={onStartManual} onResolve={onResolveManual} /> : null}
             {view === 'profile' ? (
-              <ProfilePage
-                profile={profile}
-                onSave={async (payload) => {
-                  await api.saveProfile(payload)
-                  await refresh()
-                }}
-              />
+                <ProfilePage
+                  profile={profile}
+                  onSave={async (payload) => {
+                    try {
+                      setError(null)
+                      await api.saveProfile(payload)
+                      await refresh()
+                    } catch (error) {
+                      setError(formatApiError(error, 'Failed to save profile'))
+                      throw error
+                    }
+                  }}
+                />
             ) : null}
             {view === 'runs' ? (
               <RunsPage

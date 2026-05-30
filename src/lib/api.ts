@@ -26,6 +26,116 @@ export type LLMProviderListResponse = {
   items: LLMProviderSummary[]
 }
 
+type ApiErrorInit = {
+  message: string
+  status: number
+  path: string
+  hint?: string
+  rawBody?: string
+}
+
+type ErrorPayload = {
+  message?: string
+  error?: string
+}
+
+export class ApiError extends Error {
+  status: number
+  path: string
+  hint?: string
+  rawBody?: string
+
+  constructor(init: ApiErrorInit) {
+    super(init.hint ? `${init.message} ${init.hint}` : init.message)
+    this.name = 'ApiError'
+    this.status = init.status
+    this.path = init.path
+    this.hint = init.hint
+    this.rawBody = init.rawBody
+  }
+}
+
+function looksLikeHtml(value: string): boolean {
+  const normalized = value.trim().toLowerCase()
+  return /<!doctype\s+html|<html[\s>]/i.test(normalized)
+}
+
+function isCloudflareWorkerCrash(value: string): boolean {
+  return /worker threw exception|cf-error-code|cloudflare ray id|error\s*1101/i.test(value)
+}
+
+function compactForUi(value: string): string {
+  const oneLine = value.replace(/\s+/g, ' ').trim()
+  if (oneLine.length <= 320) {
+    return oneLine
+  }
+  return `${oneLine.slice(0, 317)}...`
+}
+
+function parseErrorMessage(response: Response, rawBody: string): string {
+  const contentType = response.headers.get('content-type') || ''
+  const text = rawBody.trim()
+
+  if (isCloudflareWorkerCrash(text)) {
+    return 'Cloudflare Pages Function crashed while handling this request.'
+  }
+
+  if (contentType.includes('application/json')) {
+    try {
+      const body = JSON.parse(rawBody) as ErrorPayload
+      const message = typeof body.message === 'string' ? body.message : typeof body.error === 'string' ? body.error : ''
+      if (message.trim()) {
+        return message.trim()
+      }
+    } catch {
+      // Ignore parse errors and fall through.
+    }
+  }
+
+  if (!text) {
+    return `Request failed with HTTP ${response.status}`
+  }
+
+  if (looksLikeHtml(text)) {
+    return `API returned an HTML error page (HTTP ${response.status})`
+  }
+
+  return text
+}
+
+function buildErrorHint(status: number, message: string): string | undefined {
+  if (/clerk auth misconfigured/i.test(message)) {
+    return 'Set CLERK_JWKS_URL and CLERK_ISSUER in Cloudflare Pages variables, then redeploy.'
+  }
+  if (/worker threw exception|cloudflare pages function crashed|error\s*1101/i.test(message)) {
+    return 'Open Cloudflare Pages Function logs and fix the runtime exception before retrying.'
+  }
+  if (status === 401) {
+    return 'Sign in again. If this continues, verify Clerk JWT settings in Cloudflare Pages.'
+  }
+  if (status >= 500) {
+    return 'Check required backend services and env vars (Pages Functions, Neon, Clerk) and then redeploy.'
+  }
+  if (status === 0) {
+    return 'Check network connectivity and confirm the Cloudflare Pages deployment is reachable.'
+  }
+  return undefined
+}
+
+export function formatApiError(error: unknown, context?: string): string {
+  const prefix = context ? `${context}: ` : ''
+
+  if (error instanceof ApiError) {
+    return `${prefix}${compactForUi(error.message)}`
+  }
+
+  if (error instanceof Error) {
+    return `${prefix}${compactForUi(error.message || 'Unexpected error')}`
+  }
+
+  return `${prefix}Unexpected error`
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const authToken = authTokenResolver ? await authTokenResolver() : null
   const headers = new Headers(init?.headers ?? {})
@@ -36,13 +146,33 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set('Authorization', `Bearer ${authToken}`)
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers,
-    ...init,
-  })
+  let response: Response
+
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      headers,
+      ...init,
+    })
+  } catch (error) {
+    throw new ApiError({
+      message: 'Could not reach the API service.',
+      status: 0,
+      path,
+      hint: buildErrorHint(0, ''),
+      rawBody: error instanceof Error ? error.message : undefined,
+    })
+  }
+
   if (!response.ok) {
     const text = await response.text()
-    throw new Error(text || `HTTP ${response.status}`)
+    const message = parseErrorMessage(response, text)
+    throw new ApiError({
+      message,
+      status: response.status,
+      path,
+      hint: buildErrorHint(response.status, message),
+      rawBody: text,
+    })
   }
   return (await response.json()) as T
 }
@@ -130,7 +260,14 @@ export const api = {
     return send().then(async (r) => {
       if (!r.ok) {
         const text = await r.text()
-        throw new Error(text || `HTTP ${r.status}`)
+        const message = parseErrorMessage(r, text)
+        throw new ApiError({
+          message,
+          status: r.status,
+          path: '/api/profile/import-resume',
+          hint: buildErrorHint(r.status, message),
+          rawBody: text,
+        })
       }
       return r.json()
     })

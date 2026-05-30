@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless'
 import { Hono } from 'hono'
+import { handle } from 'hono/cloudflare-pages'
 import { cors } from 'hono/cors'
 import { HTTPException } from 'hono/http-exception'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
@@ -1341,4 +1342,4 @@ app.onError((error) => {
   return new Response('Internal server error', { status: 500 })
 })
 
-export const onRequest = app.fetch
+export const onRequest = handle(app)
