@@ -282,8 +282,9 @@ export default function App() {
   const ShellNav = ({ mobile = false }: { mobile?: boolean }) => (
     <div className="flex h-full flex-col">
       <div className="border-b border-gray-200 px-4 py-5 dark:border-gray-800">
-        <p className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">huntarr</p>
-        <p className="mt-1 text-xs uppercase tracking-[0.2em] text-gray-500 dark:text-gray-400">control center</p>
+        <img src="/brand/logo.svg" alt="Huntarr" className="h-8 w-auto dark:hidden" />
+        <img src="/brand/logo-dark.svg" alt="Huntarr" className="hidden h-8 w-auto dark:block" />
+        <p className="mt-2 text-xs uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">autonomous job ops</p>
       </div>
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navItems.map((item) => {
@@ -392,8 +393,8 @@ export default function App() {
                 <Button variant="attention" onClick={startHunt} disabled={busy} className="text-xs sm:text-sm">
                   Start Hunt
                 </Button>
-                <span className="hidden h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-bold text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 sm:inline-flex">
-                  HR
+                <span className="hidden h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 sm:inline-flex">
+                  <img src="/brand/icon.svg" alt="" aria-hidden className="h-6 w-6 rounded-md" />
                 </span>
               </div>
             </div>

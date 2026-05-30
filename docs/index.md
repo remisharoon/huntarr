@@ -7,6 +7,8 @@ robots: index, follow
 
 # Huntarr Documentation
 
+![Huntarr brand mark](assets/logo.svg)
+
 Huntarr is moving to a cloud-first architecture focused on:
 
 - Cloudflare Pages (frontend + Pages Functions)

@@ -48,7 +48,7 @@ export function Button({
     ghost: 'bg-transparent text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800',
     icon: 'h-9 w-9 border border-transparent bg-transparent p-0 text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800',
     danger: 'bg-red-600 text-white hover:bg-red-700',
-    attention: 'bg-gradient-to-r from-purple-600 to-pink-500 text-white shadow-sm hover:from-purple-500 hover:to-pink-500',
+    attention: 'bg-gradient-to-r from-cyan-600 to-teal-600 text-white shadow-sm hover:from-cyan-500 hover:to-teal-500',
   }
 
   return (

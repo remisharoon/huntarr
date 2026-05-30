@@ -22,8 +22,8 @@ const config: Config = {
         primary: 'hsl(var(--color-primary) / <alpha-value>)',
       },
       fontFamily: {
-        display: ['ui-sans-serif', 'system-ui', 'sans-serif'],
-        body: ['ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: ['Sora', 'Manrope', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        body: ['Manrope', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         card: '0 1px 2px rgb(15 23 42 / 0.08), 0 8px 24px -18px rgb(15 23 42 / 0.3)',

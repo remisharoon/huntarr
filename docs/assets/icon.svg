@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Huntarr icon</title>
+  <desc id="desc">Rounded square mark with a stylized hunting arrow H.</desc>
+  <defs>
+    <linearGradient id="docsHuntarrIconBg" x1="28" y1="20" x2="230" y2="238" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0b7285" />
+      <stop offset="1" stop-color="#0ea5e9" />
+    </linearGradient>
+    <radialGradient id="docsHuntarrIconGlow" cx="0" cy="0" r="1" gradientTransform="translate(192 66) rotate(123.111) scale(88.9341)">
+      <stop offset="0" stop-color="#ecfeff" stop-opacity="0.8" />
+      <stop offset="1" stop-color="#ecfeff" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect x="16" y="16" width="224" height="224" rx="56" fill="url(#docsHuntarrIconBg)" />
+  <rect x="16" y="16" width="224" height="224" rx="56" fill="url(#docsHuntarrIconGlow)" />
+  <rect x="16" y="16" width="224" height="224" rx="56" fill="none" stroke="rgba(255,255,255,0.24)" stroke-width="2" />
+  <path d="M78 66V190M178 66V190M78 128H146M146 128L178 96" fill="none" stroke="#f8fafc" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

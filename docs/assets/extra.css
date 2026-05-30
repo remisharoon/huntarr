@@ -1,30 +1,73 @@
-/* Custom CSS for documentation */
 :root {
-  --md-primary-fg-color: #4f46e5;
-  --md-primary-fg-color--light: #818cf8;
-  --md-primary-fg-color--dark: #3730a3;
+  --md-primary-fg-color: #0b7285;
+  --md-primary-fg-color--light: #0ea5e9;
+  --md-primary-fg-color--dark: #115e6f;
+  --md-accent-fg-color: #0891b2;
+  --md-accent-fg-color--transparent: rgb(8 145 178 / 0.14);
+  --md-typeset-a-color: #0b7285;
 }
 
-/* SEO: Ensure headings are semantic */
-h1, h2, h3, h4, h5, h6 {
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #0f172a;
+  --md-primary-fg-color--light: #1e293b;
+  --md-primary-fg-color--dark: #020617;
+  --md-accent-fg-color: #38bdf8;
+  --md-accent-fg-color--transparent: rgb(56 189 248 / 0.18);
+  --md-typeset-a-color: #67e8f9;
+}
+
+body {
+  font-family: Manrope, ui-sans-serif, system-ui, sans-serif;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4,
+.md-typeset h5,
+.md-typeset h6,
+.md-header__title,
+.md-nav__title {
+  font-family: Sora, Manrope, ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.02em;
   scroll-margin-top: 1.5rem;
 }
 
-/* SEO: Improve code block readability */
-.codehilite {
-  margin: 1rem 0;
+.md-header {
+  background:
+    radial-gradient(circle at 0% 0%, rgb(14 165 233 / 0.2), transparent 42%),
+    radial-gradient(circle at 100% 10%, rgb(11 114 133 / 0.18), transparent 38%),
+    var(--md-primary-fg-color);
 }
 
-/* SEO: Optimize table readability */
+.md-tabs {
+  background: linear-gradient(90deg, rgb(11 114 133 / 0.92), rgb(8 145 178 / 0.92));
+}
+
+[data-md-color-scheme="slate"] .md-header {
+  background:
+    radial-gradient(circle at 0% 0%, rgb(14 165 233 / 0.17), transparent 38%),
+    radial-gradient(circle at 100% 10%, rgb(15 23 42 / 0.42), transparent 40%),
+    var(--md-primary-fg-color);
+}
+
+[data-md-color-scheme="slate"] .md-tabs {
+  background: linear-gradient(90deg, rgb(15 23 42 / 0.95), rgb(8 47 73 / 0.95));
+}
+
 .md-typeset table:not([class]) {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
 }
 
-/* SEO: Ensure links are accessible */
 a {
   text-decoration: none;
 }
 
 a:hover {
   text-decoration: underline;
+}
+
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: 0.75rem;
 }

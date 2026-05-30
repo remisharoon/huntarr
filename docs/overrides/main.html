@@ -1,5 +1,13 @@
 {% extends "base.html" %}
 
+{% block extrahead %}
+  {{ super() }}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#0b7285">
+{% endblock %}
+
 {% block scripts %}
   {{ super() }}
   <script type="application/ld+json">
@@ -7,7 +15,7 @@
     "@context": "https://schema.org",
     "@type": "SoftwareDocumentation",
     "name": "Huntarr Documentation",
-    "description": "Complete documentation for Huntarr - an automated job research and application agent",
+    "description": "Documentation for Huntarr, the autonomous job operations platform.",
     "url": "{{ page.canonical_url }}",
     "applicationCategory": "BusinessApplication",
     "operatingSystem": "Linux, macOS, Windows",
