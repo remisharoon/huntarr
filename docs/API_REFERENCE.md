@@ -99,6 +99,37 @@ Response:
 }
 ```
 
+### Runs
+
+- `POST /api/runs`
+
+`POST` body (example):
+
+```json
+{
+  "mode": "manual",
+  "search_config": {
+    "role_keywords": ["Software Engineer"],
+    "locations": ["Remote"],
+    "sources": ["remoteok", "remotive", "themuse"],
+    "max_jobs_per_run": 80
+  }
+}
+```
+
+Supported source IDs:
+
+- `remoteok`
+- `weworkremotely`
+- `remotive`
+- `themuse`
+- `arbeitnow`
+- `brave_search` (placeholder; unavailable in this cloud build)
+- `adzuna` (requires credential metadata `app_id`)
+- `usajobs` (requires credential metadata `user_agent`)
+
+Run events include per-source fetch, warning, and failure details.
+
 ## Notes
 
 - This reference covers the currently implemented Pages Functions endpoints.

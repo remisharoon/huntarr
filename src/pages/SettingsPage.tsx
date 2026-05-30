@@ -12,28 +12,90 @@ const defaultProviderForm = {
   api_key: '',
 }
 
-type JobSources = {
-  remoteok: boolean
-  weworkremotely: boolean
-  brave_search: boolean
+type JobSources = Record<string, boolean>
+
+type JobSourceDefinition = {
+  id: string
+  label: string
+  description: string
+  defaultEnabled: boolean
+  setup: 'ready' | 'credentials' | 'unavailable' | 'attribution'
 }
 
-const defaultJobSources: JobSources = {
-  remoteok: true,
-  weworkremotely: true,
-  brave_search: true,
-}
+const jobSourceDefinitions: JobSourceDefinition[] = [
+  {
+    id: 'remoteok',
+    label: 'RemoteOK',
+    description: 'remoteok.com feed for remote-first engineering roles',
+    defaultEnabled: true,
+    setup: 'attribution',
+  },
+  {
+    id: 'weworkremotely',
+    label: 'WeWorkRemotely',
+    description: 'weworkremotely.com RSS feed',
+    defaultEnabled: true,
+    setup: 'ready',
+  },
+  {
+    id: 'remotive',
+    label: 'Remotive',
+    description: 'remotive.com remote jobs API (attribution + conservative polling)',
+    defaultEnabled: true,
+    setup: 'attribution',
+  },
+  {
+    id: 'themuse',
+    label: 'The Muse',
+    description: 'themuse.com public jobs API',
+    defaultEnabled: true,
+    setup: 'ready',
+  },
+  {
+    id: 'arbeitnow',
+    label: 'Arbeitnow',
+    description: 'arbeitnow.com job board API (global + EU roles)',
+    defaultEnabled: true,
+    setup: 'ready',
+  },
+  {
+    id: 'brave_search',
+    label: 'Brave Search',
+    description: 'ATS domain search (not available in current cloud build)',
+    defaultEnabled: false,
+    setup: 'unavailable',
+  },
+  {
+    id: 'adzuna',
+    label: 'Adzuna',
+    description: 'adzuna.com jobs API (requires app_id + app_key)',
+    defaultEnabled: false,
+    setup: 'credentials',
+  },
+  {
+    id: 'usajobs',
+    label: 'USAJobs',
+    description: 'data.usajobs.gov API (requires key + User-Agent)',
+    defaultEnabled: false,
+    setup: 'credentials',
+  },
+]
+
+const defaultJobSources: JobSources = jobSourceDefinitions.reduce<JobSources>((acc, source) => {
+  acc[source.id] = source.defaultEnabled
+  return acc
+}, {})
 
 function normalizeJobSources(source: unknown): JobSources {
+  const normalized = { ...defaultJobSources }
   if (!source || typeof source !== 'object') {
-    return { ...defaultJobSources }
+    return normalized
   }
   const value = source as Record<string, unknown>
-  return {
-    remoteok: Boolean(value.remoteok),
-    weworkremotely: Boolean(value.weworkremotely),
-    brave_search: Boolean(value.brave_search),
+  for (const [key, entry] of Object.entries(value)) {
+    normalized[key] = Boolean(entry)
   }
+  return normalized
 }
 
 function normalizeProfileForSettings(profile: Profile | null): Profile | null {
@@ -59,6 +121,20 @@ function normalizeProfileForSettings(profile: Profile | null): Profile | null {
 export function SettingsPage() {
   type MessageTone = 'info' | 'danger'
 
+  const sourceBadge = (setup: JobSourceDefinition['setup']) => {
+    switch (setup) {
+      case 'ready':
+        return { tone: 'success' as const, label: 'Ready' }
+      case 'credentials':
+        return { tone: 'warning' as const, label: 'Needs key' }
+      case 'attribution':
+        return { tone: 'warning' as const, label: 'Attribution' }
+      case 'unavailable':
+      default:
+        return { tone: 'danger' as const, label: 'Unavailable' }
+    }
+  }
+
   const [config, setConfig] = useState<any>({})
   const [credentials, setCredentials] = useState<any[]>([])
   const [schedules, setSchedules] = useState<any[]>([])
@@ -78,6 +154,10 @@ export function SettingsPage() {
   const [openRouterModel, setOpenRouterModel] = useState('openai/gpt-4o-mini')
   const [steelApiKey, setSteelApiKey] = useState('')
   const [steelProjectId, setSteelProjectId] = useState('')
+  const [adzunaAppId, setAdzunaAppId] = useState('')
+  const [adzunaApiKey, setAdzunaApiKey] = useState('')
+  const [usajobsApiKey, setUsajobsApiKey] = useState('')
+  const [usajobsUserAgent, setUsajobsUserAgent] = useState('')
 
   const flashMessage = (text: string) => {
     setMessageTone('info')
@@ -113,17 +193,24 @@ export function SettingsPage() {
       setProfile(normalizedProfile)
       setJobSources(normalizeJobSources(profileRes.job_sources))
 
-      try {
-        const [openRouterCred, steelCred] = await Promise.all([
-          api.getCredential('openrouter.ai', 'default'),
-          api.getCredential('steel.dev', 'default'),
-        ])
-        setOpenRouterApiKey((openRouterCred as any)?.password || '')
-        setSteelApiKey((steelCred as any)?.password || '')
-      } catch {
-        setOpenRouterApiKey('')
-        setSteelApiKey('')
-      }
+      const [openRouterCredRes, steelCredRes, adzunaCredRes, usajobsCredRes] = await Promise.allSettled([
+        api.getCredential('openrouter.ai', 'default'),
+        api.getCredential('steel.dev', 'default'),
+        api.getCredential('adzuna.com', 'default'),
+        api.getCredential('usajobs.gov', 'default'),
+      ])
+
+      const openRouterCred = openRouterCredRes.status === 'fulfilled' ? (openRouterCredRes.value as any) : null
+      const steelCred = steelCredRes.status === 'fulfilled' ? (steelCredRes.value as any) : null
+      const adzunaCred = adzunaCredRes.status === 'fulfilled' ? (adzunaCredRes.value as any) : null
+      const usajobsCred = usajobsCredRes.status === 'fulfilled' ? (usajobsCredRes.value as any) : null
+
+      setOpenRouterApiKey(openRouterCred?.password || '')
+      setSteelApiKey(steelCred?.password || '')
+      setAdzunaApiKey(adzunaCred?.password || '')
+      setAdzunaAppId(adzunaCred?.metadata?.app_id || '')
+      setUsajobsApiKey(usajobsCred?.password || '')
+      setUsajobsUserAgent(usajobsCred?.metadata?.user_agent || '')
 
       setOpenRouterModel((configRes as any)?.value?.openrouter_model || 'openai/gpt-4o-mini')
       setSteelProjectId((configRes as any)?.value?.steel_project_id || '')
@@ -393,12 +480,36 @@ export function SettingsPage() {
         })
       }
 
+      if (adzunaApiKey.trim() || adzunaAppId.trim()) {
+        if (!adzunaApiKey.trim() || !adzunaAppId.trim()) {
+          throw new Error('Both Adzuna app key and app ID are required')
+        }
+        await api.storeCredential({
+          domain: 'adzuna.com',
+          username: 'default',
+          password: adzunaApiKey.trim(),
+          metadata: { provider: 'adzuna', app_id: adzunaAppId.trim() },
+        })
+      }
+
+      if (usajobsApiKey.trim() || usajobsUserAgent.trim()) {
+        if (!usajobsApiKey.trim() || !usajobsUserAgent.trim()) {
+          throw new Error('Both USAJobs API key and User-Agent email are required')
+        }
+        await api.storeCredential({
+          domain: 'usajobs.gov',
+          username: 'default',
+          password: usajobsApiKey.trim(),
+          metadata: { provider: 'usajobs', user_agent: usajobsUserAgent.trim() },
+        })
+      }
+
       await saveConfig({
         openrouter_model: openRouterModel.trim() || 'openai/gpt-4o-mini',
         steel_project_id: steelProjectId.trim(),
       })
 
-      flashMessage('BYOK settings saved')
+      flashMessage('Provider settings saved')
       await loadData()
     } catch (error) {
       showErrorMessage(formatApiError(error, 'Failed to save BYOK settings'))
@@ -485,13 +596,13 @@ export function SettingsPage() {
 
       <Card className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">BYOK Providers</h2>
-          <Badge tone="info">OpenRouter + Steel.dev</Badge>
+          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Provider Keys</h2>
+          <Badge tone="info">BYOK</Badge>
         </div>
         <div className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
           <p>Bring your own keys. Huntarr does not ship with shared API keys.</p>
           <p>OpenRouter key is used directly from the browser for AI tasks.</p>
-          <p>Steel key is used only when creating automation sessions.</p>
+          <p>Steel key powers automation. Adzuna/USAJobs keys unlock additional discovery sources.</p>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
@@ -530,11 +641,43 @@ export function SettingsPage() {
               Test Steel Key
             </Button>
           </div>
+
+          <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Adzuna (Optional)</p>
+            <Input
+              placeholder="Adzuna app ID"
+              value={adzunaAppId}
+              onChange={(event) => setAdzunaAppId(event.target.value)}
+            />
+            <Input
+              type="password"
+              placeholder="Adzuna app key"
+              value={adzunaApiKey}
+              onChange={(event) => setAdzunaApiKey(event.target.value)}
+            />
+            <p className="text-xs text-gray-600 dark:text-gray-400">Stored as credential `adzuna.com/default`.</p>
+          </div>
+
+          <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">USAJobs (Optional)</p>
+            <Input
+              placeholder="User-Agent email (required by USAJobs)"
+              value={usajobsUserAgent}
+              onChange={(event) => setUsajobsUserAgent(event.target.value)}
+            />
+            <Input
+              type="password"
+              placeholder="USAJobs API key"
+              value={usajobsApiKey}
+              onChange={(event) => setUsajobsApiKey(event.target.value)}
+            />
+            <p className="text-xs text-gray-600 dark:text-gray-400">Stored as credential `usajobs.gov/default`.</p>
+          </div>
         </div>
 
         <div className="flex justify-end">
           <Button type="button" disabled={busy} onClick={saveByokKeys} className="h-8 px-3 text-xs">
-            Save BYOK Settings
+            Save Provider Settings
           </Button>
         </div>
       </Card>
@@ -673,53 +816,26 @@ export function SettingsPage() {
         <p className="text-sm text-gray-600 dark:text-gray-400">Select which job sources to query when starting hunts. All sources run in parallel.</p>
 
         <div className="space-y-2">
-          <label className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/60">
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                checked={jobSources.remoteok}
-                onChange={(event) => updateJobSources({ ...jobSources, remoteok: event.target.checked })}
-                disabled={busy}
-              />
-              <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">RemoteOK</p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">remoteok.com API - remote-focused jobs</p>
-              </div>
-            </div>
-            <Badge tone="success">Ready</Badge>
-          </label>
-
-          <label className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/60">
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                checked={jobSources.weworkremotely}
-                onChange={(event) => updateJobSources({ ...jobSources, weworkremotely: event.target.checked })}
-                disabled={busy}
-              />
-              <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">WeWorkRemotely</p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">weworkremotely.com - RSS feed scraping</p>
-              </div>
-            </div>
-            <Badge tone="success">Ready</Badge>
-          </label>
-
-          <label className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/60">
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                checked={jobSources.brave_search}
-                onChange={(event) => updateJobSources({ ...jobSources, brave_search: event.target.checked })}
-                disabled={busy}
-              />
-              <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Brave Search</p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">ATS domains (Greenhouse, Lever, Workday)</p>
-              </div>
-            </div>
-            <Badge tone="warning">Check API key</Badge>
-          </label>
+          {jobSourceDefinitions.map((source) => {
+            const badge = sourceBadge(source.setup)
+            return (
+              <label key={source.id} className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/60">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(jobSources[source.id])}
+                    onChange={(event) => updateJobSources({ ...jobSources, [source.id]: event.target.checked })}
+                    disabled={busy}
+                  />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{source.label}</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">{source.description}</p>
+                  </div>
+                </div>
+                <Badge tone={badge.tone}>{badge.label}</Badge>
+              </label>
+            )
+          })}
         </div>
       </Card>
 

@@ -199,6 +199,7 @@ export function RunDetailPage({ runId, onBack }: RunDetailPageProps) {
           <div className="space-y-2 text-sm">
             <SearchConfigItem label="Role keywords" value={run.search_config.role_keywords} />
             <SearchConfigItem label="Locations" value={run.search_config.locations} />
+            <SearchConfigItem label="Sources" value={run.search_config.sources} />
             <SearchConfigItem label="Remote only" value={run.search_config.remote_only} />
             <SearchConfigItem
               label="Salary range"

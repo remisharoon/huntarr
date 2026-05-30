@@ -144,6 +144,36 @@ type ProfileRecord = {
   job_sources?: Record<string, boolean>
 }
 
+type CredentialRecord = {
+  username: string
+  password: string
+  metadata: JsonObject
+}
+
+type NormalizedJobInput = {
+  title: string
+  company: string
+  location: string
+  source: string
+  url: string | null
+  description: string
+  posted_at: string | null
+  score?: number
+}
+
+type SourceFetchContext = {
+  role: string
+  location: string
+  storage: Storage
+  userId: string
+}
+
+type SourceFetchOutcome = {
+  source: string
+  jobs: NormalizedJobInput[]
+  warnings: string[]
+}
+
 type LLMProviderRecord = {
   id: string
   name: string
@@ -168,6 +198,24 @@ type ScheduleRecord = {
 
 const DEFAULT_USER_ID = 'anonymous'
 const memoryStore = new Map<string, { value: unknown; updatedAt: string }>()
+
+const JOB_SOURCE_CATALOG: ReadonlyArray<{ id: string; enabledByDefault: boolean }> = [
+  { id: 'remoteok', enabledByDefault: true },
+  { id: 'weworkremotely', enabledByDefault: true },
+  { id: 'remotive', enabledByDefault: true },
+  { id: 'themuse', enabledByDefault: true },
+  { id: 'arbeitnow', enabledByDefault: true },
+  { id: 'brave_search', enabledByDefault: false },
+  { id: 'adzuna', enabledByDefault: false },
+  { id: 'usajobs', enabledByDefault: false },
+]
+
+const DEFAULT_JOB_SOURCES = JOB_SOURCE_CATALOG.reduce<Record<string, boolean>>((acc, source) => {
+  acc[source.id] = source.enabledByDefault
+  return acc
+}, {})
+
+const KNOWN_SOURCE_IDS = new Set(JOB_SOURCE_CATALOG.map((source) => source.id))
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 
@@ -248,11 +296,7 @@ const defaultProfile: ProfileRecord = {
   natural_language_override: null,
   desired_job_title: null,
   desired_location: null,
-  job_sources: {
-    remoteok: true,
-    weworkremotely: true,
-    brave_search: true,
-  },
+  job_sources: { ...DEFAULT_JOB_SOURCES },
 }
 
 class Storage {
@@ -432,6 +476,494 @@ async function listRunEvents(storage: Storage, userId: string, runId: string): P
   return items
     .filter((item) => item.run_id === runId)
     .sort((a, b) => Number(a.id) - Number(b.id))
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => asString(item).trim())
+    .filter(Boolean)
+}
+
+function mergeJobSources(...sources: Array<unknown>): Record<string, boolean> {
+  const merged: Record<string, boolean> = { ...DEFAULT_JOB_SOURCES }
+  for (const source of sources) {
+    const candidate = asObject(source)
+    for (const [key, value] of Object.entries(candidate)) {
+      merged[key] = Boolean(value)
+    }
+  }
+  return merged
+}
+
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function stripHtml(value: string): string {
+  return value
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function clampScore(value: number): number {
+  return Math.min(0.99, Math.max(0.45, value))
+}
+
+function deterministicScore(seed: string): number {
+  let hash = 2166136261
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  const scaled = (Math.abs(hash) % 48) / 100
+  return clampScore(0.5 + scaled)
+}
+
+function canonicalUrl(value: string | null): string | null {
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    url.hash = ''
+    if (url.pathname !== '/') {
+      url.pathname = url.pathname.replace(/\/+$/, '')
+    }
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
+function parseIsoDate(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const time = Date.parse(trimmed)
+  if (Number.isNaN(time)) return null
+  return new Date(time).toISOString()
+}
+
+function cdataText(value: string): string {
+  return value.replace(/^<!\[CDATA\[([\s\S]*)\]\]>$/i, '$1').trim()
+}
+
+function getXmlTagValue(input: string, tag: string): string {
+  const match = input.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\/${tag}>`, 'i'))
+  return match ? cdataText(match[1]) : ''
+}
+
+function createNormalizedJob(source: string, fallbackLocation: string, input: Partial<NormalizedJobInput>): NormalizedJobInput | null {
+  const title = asString(input.title).trim()
+  if (!title) return null
+  const company = asString(input.company, 'Unknown company').trim() || 'Unknown company'
+  const location = asString(input.location, fallbackLocation).trim() || fallbackLocation
+  const description = stripHtml(asString(input.description)).slice(0, 4000)
+  const url = canonicalUrl(input.url ?? null)
+  const postedAt = parseIsoDate(input.posted_at)
+  const score = typeof input.score === 'number' && Number.isFinite(input.score)
+    ? clampScore(input.score)
+    : deterministicScore(`${source}|${title}|${company}|${location}`)
+
+  return {
+    title,
+    company,
+    location,
+    source,
+    url,
+    description,
+    posted_at: postedAt,
+    score,
+  }
+}
+
+function fingerprintForJob(input: { title: string; company: string; location: string; url: string | null }): string {
+  const url = canonicalUrl(input.url)
+  if (url) {
+    return `u:${url}`
+  }
+  return `t:${normalizeText(input.title)}|c:${normalizeText(input.company)}|l:${normalizeText(input.location)}`
+}
+
+async function requestJson(url: string, init?: RequestInit, timeoutMs = 12000): Promise<unknown> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const headers = new Headers(init?.headers ?? {})
+    if (!headers.has('Accept')) {
+      headers.set('Accept', 'application/json')
+    }
+
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      headers,
+    })
+    if (!response.ok) {
+      const text = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 240)
+      throw new Error(text || `Request failed (${response.status})`)
+    }
+    return await response.json()
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function requestText(url: string, init?: RequestInit, timeoutMs = 12000): Promise<string> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    })
+    if (!response.ok) {
+      const text = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 240)
+      throw new Error(text || `Request failed (${response.status})`)
+    }
+    return await response.text()
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function readCredential(storage: Storage, userId: string, domain: string, username = 'default'): Promise<CredentialRecord | null> {
+  const value = asObject(await storage.get(userCredentialKey(userId, domain, username)))
+  const password = asString(value.password).trim()
+  if (!password) return null
+  return {
+    username,
+    password,
+    metadata: asObject(value.metadata),
+  }
+}
+
+async function fetchRemoteOkJobs(context: SourceFetchContext): Promise<SourceFetchOutcome> {
+  const roleTags = context.role
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(',')
+
+  const url = roleTags
+    ? `https://remoteok.com/api?tags=${encodeURIComponent(roleTags)}`
+    : 'https://remoteok.com/api'
+
+  const payload = await requestJson(url)
+  if (!Array.isArray(payload)) {
+    throw new Error('Unexpected Remote OK response payload')
+  }
+
+  const jobs = payload
+    .slice(1)
+    .map((entry) => asObject(entry))
+    .map((entry) =>
+      createNormalizedJob('remoteok', context.location, {
+        title: asString(entry.position),
+        company: asString(entry.company),
+        location: asString(entry.location, 'Remote'),
+        url: asString(entry.url) || asString(entry.apply_url),
+        description: asString(entry.description),
+        posted_at: asString(entry.date) || asString(entry.iso_date),
+      }),
+    )
+    .filter((job): job is NormalizedJobInput => Boolean(job))
+    .slice(0, 40)
+
+  return { source: 'remoteok', jobs, warnings: [] }
+}
+
+async function fetchWeWorkRemotelyJobs(context: SourceFetchContext): Promise<SourceFetchOutcome> {
+  const xml = await requestText('https://weworkremotely.com/remote-jobs.rss')
+  const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map((match) => match[1])
+
+  const jobs = items
+    .map((item) => {
+      const rawTitle = stripHtml(getXmlTagValue(item, 'title'))
+      const [companyPart, titlePart] = rawTitle.split(/:\s+/, 2)
+      return createNormalizedJob('weworkremotely', context.location, {
+        title: titlePart || rawTitle,
+        company: titlePart ? companyPart : 'WeWorkRemotely',
+        location: context.location,
+        url: getXmlTagValue(item, 'link'),
+        description: getXmlTagValue(item, 'description'),
+        posted_at: getXmlTagValue(item, 'pubDate'),
+      })
+    })
+    .filter((job): job is NormalizedJobInput => Boolean(job))
+    .slice(0, 40)
+
+  return { source: 'weworkremotely', jobs, warnings: [] }
+}
+
+async function fetchRemotiveJobs(context: SourceFetchContext): Promise<SourceFetchOutcome> {
+  const url = `https://remotive.com/api/remote-jobs?search=${encodeURIComponent(context.role)}&limit=40`
+  const payload = asObject(await requestJson(url))
+  const rows = Array.isArray(payload.jobs) ? payload.jobs : []
+
+  const jobs = rows
+    .map((row) => asObject(row))
+    .map((row) =>
+      createNormalizedJob('remotive', context.location, {
+        title: asString(row.title),
+        company: asString(row.company_name),
+        location: asString(row.candidate_required_location, 'Remote'),
+        url: asString(row.url),
+        description: asString(row.description),
+        posted_at: asString(row.publication_date),
+      }),
+    )
+    .filter((job): job is NormalizedJobInput => Boolean(job))
+    .slice(0, 40)
+
+  return {
+    source: 'remotive',
+    jobs,
+    warnings: ['Remotive requires source attribution and conservative polling frequency.'],
+  }
+}
+
+async function fetchTheMuseJobs(context: SourceFetchContext): Promise<SourceFetchOutcome> {
+  const url = `https://www.themuse.com/api/public/jobs?page=1&descending=true&category=${encodeURIComponent(context.role)}`
+  const payload = asObject(await requestJson(url))
+  const rows = Array.isArray(payload.results) ? payload.results : []
+
+  const jobs = rows
+    .map((row) => asObject(row))
+    .map((row) => {
+      const company = asObject(row.company)
+      const refs = asObject(row.refs)
+      const locations = Array.isArray(row.locations) ? row.locations.map((item) => asObject(item)) : []
+      return createNormalizedJob('themuse', context.location, {
+        title: asString(row.name),
+        company: asString(company.name),
+        location: asString(locations[0]?.name, context.location),
+        url: asString(refs.landing_page) || asString(refs.short_link),
+        description: asString(row.contents),
+        posted_at: asString(row.publication_date),
+      })
+    })
+    .filter((job): job is NormalizedJobInput => Boolean(job))
+    .slice(0, 30)
+
+  return { source: 'themuse', jobs, warnings: [] }
+}
+
+async function fetchArbeitnowJobs(context: SourceFetchContext): Promise<SourceFetchOutcome> {
+  const payload = asObject(await requestJson('https://www.arbeitnow.com/api/job-board-api'))
+  const rows = Array.isArray(payload.data) ? payload.data : []
+
+  const jobs = rows
+    .map((row) => asObject(row))
+    .map((row) =>
+      createNormalizedJob('arbeitnow', context.location, {
+        title: asString(row.title),
+        company: asString(row.company_name),
+        location: asString(row.location, context.location),
+        url: asString(row.url),
+        description: asString(row.description),
+        posted_at: asString(row.created_at),
+      }),
+    )
+    .filter((job): job is NormalizedJobInput => Boolean(job))
+    .slice(0, 40)
+
+  return { source: 'arbeitnow', jobs, warnings: [] }
+}
+
+async function fetchAdzunaJobs(context: SourceFetchContext): Promise<SourceFetchOutcome> {
+  const credential = await readCredential(context.storage, context.userId, 'adzuna.com')
+  if (!credential) {
+    return { source: 'adzuna', jobs: [], warnings: ['Adzuna skipped: configure app key in Settings.'] }
+  }
+
+  const appId = asString(credential.metadata.app_id).trim()
+  if (!appId) {
+    return { source: 'adzuna', jobs: [], warnings: ['Adzuna skipped: missing app_id metadata in stored credential.'] }
+  }
+
+  const params = new URLSearchParams({
+    app_id: appId,
+    app_key: credential.password,
+    what: context.role,
+    results_per_page: '20',
+    'content-type': 'application/json',
+  })
+
+  if (context.location.toLowerCase() !== 'remote') {
+    params.set('where', context.location)
+  }
+
+  const payload = asObject(await requestJson(`https://api.adzuna.com/v1/api/jobs/us/search/1?${params.toString()}`))
+  const rows = Array.isArray(payload.results) ? payload.results : []
+
+  const jobs = rows
+    .map((row) => asObject(row))
+    .map((row) => {
+      const company = asObject(row.company)
+      const location = asObject(row.location)
+      return createNormalizedJob('adzuna', context.location, {
+        title: asString(row.title),
+        company: asString(company.display_name),
+        location: asString(location.display_name, context.location),
+        url: asString(row.redirect_url),
+        description: asString(row.description),
+        posted_at: asString(row.created),
+      })
+    })
+    .filter((job): job is NormalizedJobInput => Boolean(job))
+
+  return { source: 'adzuna', jobs, warnings: [] }
+}
+
+async function fetchUsaJobs(context: SourceFetchContext): Promise<SourceFetchOutcome> {
+  const credential = await readCredential(context.storage, context.userId, 'usajobs.gov')
+  if (!credential) {
+    return { source: 'usajobs', jobs: [], warnings: ['USAJobs skipped: configure API key in Settings.'] }
+  }
+
+  const userAgent = asString(credential.metadata.user_agent).trim()
+  if (!userAgent) {
+    return { source: 'usajobs', jobs: [], warnings: ['USAJobs skipped: set required user_agent metadata in Settings.'] }
+  }
+
+  const params = new URLSearchParams({
+    Keyword: context.role,
+    ResultsPerPage: '20',
+    Fields: 'Min',
+  })
+
+  if (context.location.toLowerCase() === 'remote') {
+    params.set('RemoteIndicator', 'true')
+  } else {
+    params.set('LocationName', context.location)
+  }
+
+  const payload = asObject(
+    await requestJson(`https://data.usajobs.gov/api/search?${params.toString()}`, {
+      headers: {
+        'Authorization-Key': credential.password,
+        'User-Agent': userAgent,
+      },
+    }),
+  )
+
+  const searchResult = asObject(payload.SearchResult)
+  const rows = Array.isArray(searchResult.SearchResultItems) ? searchResult.SearchResultItems : []
+
+  const jobs = rows
+    .map((row) => asObject(row))
+    .map((row) => asObject(row.MatchedObjectDescriptor))
+    .map((descriptor) => {
+      const applyUris = asStringArray(descriptor.ApplyURI)
+      return createNormalizedJob('usajobs', context.location, {
+        title: asString(descriptor.PositionTitle),
+        company: asString(descriptor.OrganizationName) || asString(descriptor.DepartmentName),
+        location: asString(descriptor.PositionLocationDisplay, context.location),
+        url: applyUris[0] || asString(descriptor.PositionURI),
+        description: asString(descriptor.QualificationSummary),
+        posted_at: asString(descriptor.PublicationStartDate),
+      })
+    })
+    .filter((job): job is NormalizedJobInput => Boolean(job))
+
+  return { source: 'usajobs', jobs, warnings: [] }
+}
+
+async function fetchBraveSearchJobs(): Promise<SourceFetchOutcome> {
+  return {
+    source: 'brave_search',
+    jobs: [],
+    warnings: ['Brave Search source is not available in this cloud build.'],
+  }
+}
+
+const SOURCE_FETCHERS: Record<string, (context: SourceFetchContext) => Promise<SourceFetchOutcome>> = {
+  remoteok: fetchRemoteOkJobs,
+  weworkremotely: fetchWeWorkRemotelyJobs,
+  remotive: fetchRemotiveJobs,
+  themuse: fetchTheMuseJobs,
+  arbeitnow: fetchArbeitnowJobs,
+  brave_search: fetchBraveSearchJobs,
+  adzuna: fetchAdzunaJobs,
+  usajobs: fetchUsaJobs,
+}
+
+function pickEnabledSources(searchConfig: JsonObject, profileSources: Record<string, boolean>): string[] {
+  const requested = asStringArray(searchConfig.sources).map((source) => source.toLowerCase())
+  const enabledKnown = Object.entries(profileSources)
+    .filter(([id, enabled]) => enabled && KNOWN_SOURCE_IDS.has(id))
+    .map(([id]) => id)
+
+  if (!requested.length) {
+    return enabledKnown
+  }
+
+  return requested.filter((source) => KNOWN_SOURCE_IDS.has(source) && profileSources[source] !== false)
+}
+
+async function storeDiscoveredJobs(
+  storage: Storage,
+  userId: string,
+  runId: string,
+  jobs: NormalizedJobInput[],
+): Promise<{ created: number; skipped: number }> {
+  const existing = await listCollection<JobRecord>(storage, userId, 'job')
+  const fingerprints = new Set(existing.map((job) => fingerprintForJob(job)))
+
+  let created = 0
+  let skipped = 0
+
+  for (const job of jobs) {
+    const fingerprint = fingerprintForJob(job)
+    if (fingerprints.has(fingerprint)) {
+      skipped += 1
+      continue
+    }
+
+    fingerprints.add(fingerprint)
+    const now = nowIso()
+    const record: JobRecord = {
+      id: createId('job'),
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      source: job.source,
+      url: job.url,
+      score: typeof job.score === 'number' ? clampScore(job.score) : deterministicScore(fingerprint),
+      status: 'new',
+      description: job.description || 'No description available.',
+      posted_at: job.posted_at,
+      run_id: runId,
+      last_run_id: runId,
+      created_at: now,
+      updated_at: now,
+    }
+
+    await putCollectionItem(storage, userId, 'job', record.id, record)
+    created += 1
+  }
+
+  return { created, skipped }
+}
+
+function dedupeJobs(jobs: NormalizedJobInput[]): NormalizedJobInput[] {
+  const deduped = new Map<string, NormalizedJobInput>()
+  for (const job of jobs) {
+    const key = fingerprintForJob(job)
+    const existing = deduped.get(key)
+    if (!existing || (job.score ?? 0) > (existing.score ?? 0)) {
+      deduped.set(key, job)
+    }
+  }
+  return [...deduped.values()]
 }
 
 function isSseEventsPath(path: string): boolean {
@@ -828,7 +1360,11 @@ app.get('/api/profile', async (c) => {
     await storage.put(userConfigKey(userId, 'profile'), defaultProfile)
     return c.json(defaultProfile)
   }
-  return c.json({ ...defaultProfile, ...existing })
+  return c.json({
+    ...defaultProfile,
+    ...existing,
+    job_sources: mergeJobSources(defaultProfile.job_sources, existing.job_sources),
+  })
 })
 
 app.put('/api/profile', async (c) => {
@@ -836,10 +1372,12 @@ app.put('/api/profile', async (c) => {
   const body = await c.req.json<Partial<ProfileRecord>>()
   const storage = storageFor(c)
   const current = asObject(await storage.get(userConfigKey(userId, 'profile')))
+  const incoming = asObject(body)
   const next = {
     ...defaultProfile,
     ...current,
-    ...asObject(body),
+    ...incoming,
+    job_sources: mergeJobSources(defaultProfile.job_sources, current.job_sources, incoming.job_sources),
   }
   await storage.put(userConfigKey(userId, 'profile'), next)
   return c.json(next)
@@ -940,25 +1478,139 @@ app.post('/api/runs', async (c) => {
     : []
   const role = asString(roleKeywords[0], 'Software Engineer')
 
-  const seededJob: JobRecord = {
-    id: createId('job'),
-    title: role,
-    company: 'Example Labs',
-    location: asString((run.search_config.locations as unknown[] | undefined)?.[0], 'Remote'),
-    source: 'manual_seed',
-    url: 'https://example.com/jobs',
-    score: 0.72,
-    status: 'new',
-    description: 'Seeded job created from manual run to validate dashboard flow.',
-    posted_at: now,
-    run_id: run.id,
-    last_run_id: run.id,
-    created_at: now,
-    updated_at: now,
-  }
-  await putCollectionItem(storage, userId, 'job', seededJob.id, seededJob)
+  const location = asString((run.search_config.locations as unknown[] | undefined)?.[0], 'Remote')
+  const profile = asObject(await storage.get(userConfigKey(userId, 'profile')))
+  const profileSources = mergeJobSources(defaultProfile.job_sources, profile.job_sources)
+  const enabledSources = pickEnabledSources(run.search_config, profileSources)
+  const maxJobsPerRun = Math.max(1, Math.min(200, Math.round(asNumber(run.search_config.max_jobs_per_run, 80))))
 
-  return c.json(run, 201)
+  await appendRunEvent(storage, userId, run.id, {
+    level: 'info',
+    node: 'discovery',
+    event_type: 'source_selection',
+    message: enabledSources.length
+      ? `Running discovery across ${enabledSources.length} source(s)`
+      : 'No enabled sources selected; discovery will use fallback seed.',
+    payload_json: { sources: enabledSources, role, location },
+  })
+
+  const sourceContext: SourceFetchContext = {
+    role,
+    location,
+    storage,
+    userId,
+  }
+
+  const sourceResults = await Promise.allSettled(
+    enabledSources.map(async (sourceId) => {
+      const fetcher = SOURCE_FETCHERS[sourceId]
+      if (!fetcher) {
+        throw new Error(`Source '${sourceId}' is not implemented`)
+      }
+      return await fetcher(sourceContext)
+    }),
+  )
+
+  const fetchedJobs: NormalizedJobInput[] = []
+  let failedSources = 0
+
+  for (let index = 0; index < sourceResults.length; index += 1) {
+    const sourceId = enabledSources[index]
+    const result = sourceResults[index]
+    if (result.status === 'fulfilled') {
+      fetchedJobs.push(...result.value.jobs)
+      await appendRunEvent(storage, userId, run.id, {
+        level: 'info',
+        node: 'discovery',
+        event_type: 'source_fetched',
+        message: `${sourceId}: fetched ${result.value.jobs.length} jobs`,
+        payload_json: { source: sourceId, discovered: result.value.jobs.length },
+      })
+
+      for (const warning of result.value.warnings) {
+        await appendRunEvent(storage, userId, run.id, {
+          level: 'warning',
+          node: 'discovery',
+          event_type: 'source_warning',
+          message: `${sourceId}: ${warning}`,
+          payload_json: { source: sourceId },
+        })
+      }
+      continue
+    }
+
+    failedSources += 1
+    await appendRunEvent(storage, userId, run.id, {
+      level: 'warning',
+      node: 'discovery',
+      event_type: 'source_failed',
+      message: `${sourceId}: ${result.reason instanceof Error ? result.reason.message : 'unknown source error'}`,
+      payload_json: { source: sourceId },
+    })
+  }
+
+  const deduped = dedupeJobs(fetchedJobs).slice(0, maxJobsPerRun)
+  const persisted = await storeDiscoveredJobs(storage, userId, run.id, deduped)
+
+  if (persisted.created === 0) {
+    const seededJob: JobRecord = {
+      id: createId('job'),
+      title: role,
+      company: 'Example Labs',
+      location,
+      source: 'manual_seed',
+      url: 'https://example.com/jobs',
+      score: 0.72,
+      status: 'new',
+      description: 'No live jobs were discovered. This seeded job keeps the run visible in the dashboard.',
+      posted_at: now,
+      run_id: run.id,
+      last_run_id: run.id,
+      created_at: now,
+      updated_at: now,
+    }
+    await putCollectionItem(storage, userId, 'job', seededJob.id, seededJob)
+    persisted.created = 1
+
+    await appendRunEvent(storage, userId, run.id, {
+      level: 'warning',
+      node: 'discovery',
+      event_type: 'seed_fallback',
+      message: 'No external jobs were stored; inserted a fallback seeded job.',
+      payload_json: { role, location },
+    })
+  }
+
+  const nextRun: RunRecord = {
+    ...run,
+    metrics: {
+      ...run.metrics,
+      discovered: persisted.created,
+      failed: failedSources,
+      skipped: persisted.skipped,
+    },
+    error: failedSources === enabledSources.length && enabledSources.length > 0
+      ? 'All enabled job sources failed; using fallback results.'
+      : null,
+    updated_at: nowIso(),
+  }
+
+  await putCollectionItem(storage, userId, 'run', run.id, nextRun)
+
+  await appendRunEvent(storage, userId, run.id, {
+    level: 'info',
+    node: 'discovery',
+    event_type: 'discovery_complete',
+    message: `Stored ${persisted.created} jobs (${persisted.skipped} skipped duplicates).`,
+    payload_json: {
+      sources: enabledSources,
+      discovered: persisted.created,
+      skipped: persisted.skipped,
+      failed_sources: failedSources,
+    },
+  })
+
+  return c.json(nextRun, 201)
 })
 
 app.post('/api/runs/:id/pause', async (c) => {

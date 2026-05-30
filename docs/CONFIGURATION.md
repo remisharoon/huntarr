@@ -41,6 +41,17 @@ Huntarr uses user-owned keys:
 
 Keys are configured from Settings and stored per-user via API.
 
+## Optional Job Source Credentials
+
+These are optional and only needed if enabling the matching source in Settings.
+
+| Source | Domain | Username | Password | Metadata |
+|---|---|---|---|---|
+| Adzuna | `adzuna.com` | `default` | app key | `{ "app_id": "..." }` |
+| USAJobs | `usajobs.gov` | `default` | API key | `{ "user_agent": "you@example.com" }` |
+
+Both are stored as user-scoped credentials via `/api/credentials`.
+
 ## Data Storage
 
 The app stores user-scoped config and credentials in the `configs` table using key prefixes.
