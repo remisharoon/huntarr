@@ -15,11 +15,7 @@
   <rect x="16" y="16" width="188" height="188" rx="48" fill="url(#huntarrLogoGlow)" />
   <rect x="16" y="16" width="188" height="188" rx="48" fill="none" stroke="rgba(255,255,255,0.24)" stroke-width="2" />
   <path d="M68 58V162M152 58V162M68 110H124M124 110L152 82" fill="none" stroke="#f8fafc" stroke-width="15" stroke-linecap="round" stroke-linejoin="round" />
-  <g fill="#0f172a">
-    <path d="M268 150V70h15v34h40V70h15v80h-15v-34h-40v34z" />
-    <path d="M392 151q-11 0-19.5-5t-13.5-14-5-20q0-11 5-20t13.5-14 19.5-5q10 0 18.5 5t13.5 14 5 20q0 11-5 20t-13.5 14-18.5 5zm0-13q6 0 11-3t8-8.5 3-13.5-3-13.5-8-8.5-11-3-11 3-8 8.5-3 13.5 3 13.5 8 8.5 11 3z" />
-    <path d="M445 150V74h14v9q4-5 9.5-7.5T480 73q7 0 12.5 2.5t9 7.5q4-5 10-7.5t13-2.5q12 0 19 7t7 20v50h-14v-47q0-9-4-13t-11-4q-8 0-12.5 5t-4.5 14v45h-14v-47q0-9-4-13t-11-4q-8 0-12.5 5t-4.5 14v45z" />
-    <path d="M594 151q-10 0-18-4.5T563.5 134q-4.5-8-4.5-18v-42h14v40q0 11 5 17t14 6q10 0 15.5-6.5T613 112V74h14v76h-14v-10q-4 5-9.5 8t-13.5 3z" />
-    <path d="M645 150V74h14v10q4-5 10-8t14-3q13 0 20.5 8t7.5 22v47h-14v-45q0-10-5-15t-13-5q-9 0-14.5 6t-5.5 16v43z" />
-  </g>
+  <text x="264" y="140" fill="#0f172a" font-family="Avenir Next, Avenir, Futura, Trebuchet MS, sans-serif" font-size="88" font-weight="700" letter-spacing="1">
+    Huntarr
+  </text>
 </svg>
