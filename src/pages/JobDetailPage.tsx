@@ -29,7 +29,7 @@ export function JobDetailPage({ jobId, onBack, onViewApplication }: { jobId: str
   }
 
   if (error) {
-    return <Card className="p-8 text-center text-red-600">{error}</Card>
+    return <Card className="p-8 text-center text-danger">{error}</Card>
   }
 
   if (!job) {
@@ -39,7 +39,7 @@ export function JobDetailPage({ jobId, onBack, onViewApplication }: { jobId: str
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Button onClick={onBack} variant="ghost" className="border border-black/10">
+        <Button onClick={onBack} variant="ghost" className="border border-border">
           <ArrowLeft size={16} className="mr-2" />
           Back to Jobs
         </Button>
@@ -76,14 +76,14 @@ export function JobDetailPage({ jobId, onBack, onViewApplication }: { jobId: str
             <h2 className="font-display text-xl mb-3">Applications ({job.applications.length})</h2>
             <div className="space-y-2">
               {job.applications.map((app: any) => (
-                <Card key={app.id} className="flex items-center justify-between cursor-pointer hover:bg-black/[0.02]">
+                <Card key={app.id} className="flex items-center justify-between cursor-pointer hover:bg-elevated/70">
                   <div className="text-sm">
                     <span className="font-semibold">{app.status}</span>
                     <span className="text-muted ml-2">
                       {app.submitted_at ? new Date(app.submitted_at).toLocaleString() : 'Not submitted'}
                     </span>
                   </div>
-                  <Button onClick={() => onViewApplication(app.id)} variant="ghost" className="border border-black/10">View →</Button>
+                  <Button onClick={() => onViewApplication(app.id)} variant="ghost" className="border border-border">View →</Button>
                 </Card>
               ))}
             </div>

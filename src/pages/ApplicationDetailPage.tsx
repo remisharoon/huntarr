@@ -29,7 +29,7 @@ export function ApplicationDetailPage({ applicationId, onBack }: { applicationId
   }
 
   if (error) {
-    return <Card className="p-8 text-center text-red-600">{error}</Card>
+    return <Card className="p-8 text-center text-danger">{error}</Card>
   }
 
   if (!application) {
@@ -39,7 +39,7 @@ export function ApplicationDetailPage({ applicationId, onBack }: { applicationId
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Button onClick={onBack} variant="ghost" className="border border-black/10">
+        <Button onClick={onBack} variant="ghost" className="border border-border">
           <ArrowLeft size={16} className="mr-2" />
           Back to Jobs
         </Button>

@@ -176,7 +176,7 @@ export function RunDetailPage({ runId, onBack }: RunDetailPageProps) {
                 <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
                 <div>
                   <h3 className="font-semibold text-red-700">Run Failed</h3>
-                  <p className="text-sm text-red-600 mt-1">{run.error}</p>
+                  <p className="mt-1 text-sm text-danger">{run.error}</p>
                 </div>
               </div>
             </Card>
@@ -335,13 +335,13 @@ function ManualActionCard({ action }: { action: ManualAction }) {
 
 function EventCard({ event }: { event: RunEvent }) {
   const levelColors: Record<string, string> = {
-    info: 'text-muted',
-    warning: 'text-yellow-500',
-    error: 'text-red-500',
+    info: 'border-accent text-muted',
+    warning: 'border-warning text-warning',
+    error: 'border-danger text-danger',
   }
 
   return (
-    <div className={`p-2 border-l-2 rounded ${levelColors[event.level] || 'text-muted'} border-${event.level === 'error' ? 'red-500' : event.level === 'warning' ? 'yellow-500' : 'accent'}`}>
+    <div className={`rounded border-l-2 p-2 ${levelColors[event.level] || 'border-accent text-muted'}`}>
       <div className="flex justify-between text-xs">
         <span className="text-muted">{new Date(event.created_at).toLocaleTimeString()}</span>
         <span className="text-accent">{event.node || 'N/A'}</span>

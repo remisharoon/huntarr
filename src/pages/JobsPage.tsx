@@ -101,8 +101,8 @@ export function JobsPage({
           onClick={() => setStatusFilter('all')}
           className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
             statusFilter === 'all'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              ? 'border border-accent/55 bg-accent text-white'
+              : 'border border-border bg-elevated text-muted hover:bg-surface hover:text-text'
           }`}
         >
           All ({counts.total})
@@ -112,8 +112,8 @@ export function JobsPage({
           onClick={() => setStatusFilter('new')}
           className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
             statusFilter === 'new'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              ? 'border border-accent/55 bg-accent text-white'
+              : 'border border-border bg-elevated text-muted hover:bg-surface hover:text-text'
           }`}
         >
           New ({counts.new})
@@ -123,8 +123,8 @@ export function JobsPage({
           onClick={() => setStatusFilter('queued')}
           className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
             statusFilter === 'queued'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              ? 'border border-accent/55 bg-accent text-white'
+              : 'border border-border bg-elevated text-muted hover:bg-surface hover:text-text'
           }`}
         >
           Queued ({counts.queued})
@@ -134,8 +134,8 @@ export function JobsPage({
           onClick={() => setStatusFilter('applied')}
           className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
             statusFilter === 'applied'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              ? 'border border-accent/55 bg-accent text-white'
+              : 'border border-border bg-elevated text-muted hover:bg-surface hover:text-text'
           }`}
         >
           Applied ({counts.applied})
