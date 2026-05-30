@@ -461,22 +461,22 @@ export function SettingsPage() {
         actions={<Badge tone={busy ? 'warning' : 'success'}>{busy ? 'Processing' : 'Ready'}</Badge>}
       />
 
-      {message ? <Card variant="muted" className="border-accent/50 text-accent">{message}</Card> : null}
+      {message ? <Card variant="muted" className="border-blue-200 text-blue-700 dark:border-blue-900/50 dark:text-blue-300">{message}</Card> : null}
 
       <Card className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-xl text-text">BYOK Providers</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">BYOK Providers</h2>
           <Badge tone="info">OpenRouter + Steel.dev</Badge>
         </div>
-        <div className="space-y-1 text-xs text-muted">
+        <div className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
           <p>Bring your own keys. Huntarr does not ship with shared API keys.</p>
           <p>OpenRouter key is used directly from the browser for AI tasks.</p>
           <p>Steel key is used only when creating automation sessions.</p>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="space-y-2 rounded-xl border border-border bg-elevated/50 p-3">
-            <p className="text-sm font-semibold text-text">OpenRouter (BYOK)</p>
+          <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">OpenRouter (BYOK)</p>
             <Input
               type="password"
               placeholder="OpenRouter API key"
@@ -493,8 +493,8 @@ export function SettingsPage() {
             </Button>
           </div>
 
-          <div className="space-y-2 rounded-xl border border-border bg-elevated/50 p-3">
-            <p className="text-sm font-semibold text-text">Steel.dev (BYOK)</p>
+          <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Steel.dev (BYOK)</p>
             <Input
               type="password"
               placeholder="Steel API key"
@@ -521,21 +521,21 @@ export function SettingsPage() {
 
       <Card className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-xl text-text">LLM Providers (OpenAI-compatible)</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">LLM Providers (OpenAI-compatible)</h2>
           <Badge tone="info">{providers.length}</Badge>
         </div>
 
-        <div className="space-y-1 text-xs text-muted">
+        <div className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
           <p>Active provider is used for resume parsing and AI-powered features.</p>
           <p>Endpoint must support OpenAI Chat Completions.</p>
           <p>API keys are encrypted at rest.</p>
         </div>
 
         {providers.length === 0 ? (
-          <p className="text-sm text-muted">No LLM providers configured yet.</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">No LLM providers configured yet.</p>
         ) : (
           <div className="space-y-2">
-            <div className="hidden grid-cols-[1fr_1.1fr_0.8fr_0.6fr_0.6fr_auto] gap-2 rounded-xl border border-border bg-elevated/50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted md:grid">
+            <div className="hidden grid-cols-[1fr_1.1fr_0.8fr_0.6fr_0.6fr_auto] gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-gray-500 dark:border-gray-800 dark:bg-gray-900/60 dark:text-gray-400 md:grid">
               <span>Name</span>
               <span>Base URL</span>
               <span>Model</span>
@@ -544,27 +544,27 @@ export function SettingsPage() {
               <span>Actions</span>
             </div>
             {providers.map((provider) => (
-              <div key={provider.id} className="grid grid-cols-1 gap-2 rounded-xl border border-border bg-elevated/60 px-3 py-2 md:grid-cols-[1fr_1.1fr_0.8fr_0.6fr_0.6fr_auto] md:items-center">
+              <div key={provider.id} className="grid grid-cols-1 gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/70 md:grid-cols-[1fr_1.1fr_0.8fr_0.6fr_0.6fr_auto] md:items-center">
                 <div>
-                  <p className="text-xs text-muted md:hidden">Name</p>
-                  <p className="font-semibold text-text">{provider.name}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 md:hidden">Name</p>
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">{provider.name}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted md:hidden">Base URL</p>
-                  <p className="truncate text-sm text-text">{provider.base_url}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 md:hidden">Base URL</p>
+                  <p className="truncate text-sm text-gray-900 dark:text-gray-100">{provider.base_url}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted md:hidden">Model</p>
-                  <p className="text-sm text-text">{provider.model}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 md:hidden">Model</p>
+                  <p className="text-sm text-gray-900 dark:text-gray-100">{provider.model}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted md:hidden">Key</p>
-                  <p className="text-sm text-text">
+                  <p className="text-xs text-gray-600 dark:text-gray-400 md:hidden">Key</p>
+                  <p className="text-sm text-gray-900 dark:text-gray-100">
                     {!provider.has_api_key ? 'Missing' : provider.key_source === 'vault' ? 'Vault' : 'Env fallback'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted md:hidden">Status</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 md:hidden">Status</p>
                   <Badge tone={provider.id === activeProviderId ? 'success' : 'default'}>
                     {provider.id === activeProviderId ? 'Active' : 'Inactive'}
                   </Badge>
@@ -605,8 +605,8 @@ export function SettingsPage() {
           </div>
         )}
 
-        <form onSubmit={saveProvider} className="space-y-2 rounded-xl border border-border bg-elevated/50 p-3">
-          <p className="text-sm font-semibold text-text">
+        <form onSubmit={saveProvider} className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
             {editingProviderId ? 'Edit provider' : 'Add provider'}
           </p>
           <div className="grid gap-2 md:grid-cols-2">
@@ -649,11 +649,11 @@ export function SettingsPage() {
       </Card>
 
       <Card className="space-y-4">
-        <h2 className="font-display text-xl text-text">Job Sources</h2>
-        <p className="text-sm text-muted">Select which job sources to query when starting hunts. All sources run in parallel.</p>
+        <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Job Sources</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400">Select which job sources to query when starting hunts. All sources run in parallel.</p>
 
         <div className="space-y-2">
-          <label className="flex items-center justify-between rounded-xl border border-border bg-elevated/50 px-3 py-2">
+          <label className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/60">
             <div className="flex items-center gap-3">
               <input
                 type="checkbox"
@@ -662,14 +662,14 @@ export function SettingsPage() {
                 disabled={busy}
               />
               <div>
-                <p className="text-sm font-semibold text-text">RemoteOK</p>
-                <p className="text-xs text-muted">remoteok.com API - remote-focused jobs</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">RemoteOK</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">remoteok.com API - remote-focused jobs</p>
               </div>
             </div>
             <Badge tone="success">Ready</Badge>
           </label>
 
-          <label className="flex items-center justify-between rounded-xl border border-border bg-elevated/50 px-3 py-2">
+          <label className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/60">
             <div className="flex items-center gap-3">
               <input
                 type="checkbox"
@@ -678,14 +678,14 @@ export function SettingsPage() {
                 disabled={busy}
               />
               <div>
-                <p className="text-sm font-semibold text-text">WeWorkRemotely</p>
-                <p className="text-xs text-muted">weworkremotely.com - RSS feed scraping</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">WeWorkRemotely</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">weworkremotely.com - RSS feed scraping</p>
               </div>
             </div>
             <Badge tone="success">Ready</Badge>
           </label>
 
-          <label className="flex items-center justify-between rounded-xl border border-border bg-elevated/50 px-3 py-2">
+          <label className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/60">
             <div className="flex items-center gap-3">
               <input
                 type="checkbox"
@@ -694,8 +694,8 @@ export function SettingsPage() {
                 disabled={busy}
               />
               <div>
-                <p className="text-sm font-semibold text-text">Brave Search</p>
-                <p className="text-xs text-muted">ATS domains (Greenhouse, Lever, Workday)</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Brave Search</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">ATS domains (Greenhouse, Lever, Workday)</p>
               </div>
             </div>
             <Badge tone="warning">Check API key</Badge>
@@ -705,10 +705,10 @@ export function SettingsPage() {
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card className="space-y-4">
-          <h2 className="font-display text-xl text-text">Application Behavior</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Application Behavior</h2>
 
-          <div className="space-y-2 rounded-xl border border-border bg-elevated/50 p-3">
-            <label className="flex items-center gap-2 text-sm font-semibold text-text">
+          <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+            <label className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
               <input
                 type="checkbox"
                 checked={config.auto_submit_enabled ?? true}
@@ -720,11 +720,11 @@ export function SettingsPage() {
               />
               Auto-submit applications
             </label>
-            <p className="text-xs text-muted">Immediately submit eligible forms without manual review.</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400">Immediately submit eligible forms without manual review.</p>
           </div>
 
-          <div className="space-y-2 rounded-xl border border-border bg-elevated/50 p-3">
-            <label className="flex items-center gap-2 text-sm font-semibold text-text">
+          <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+            <label className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
               <input
                 type="checkbox"
                 checked={config.browser_headless ?? true}
@@ -736,11 +736,11 @@ export function SettingsPage() {
               />
               Headless browser
             </label>
-            <p className="text-xs text-muted">Disable only when visual debugging is necessary.</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400">Disable only when visual debugging is necessary.</p>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-text">Session URL</label>
+            <label className="text-sm font-semibold text-gray-900 dark:text-gray-100">Session URL</label>
             <Input
               value={config.session_url ?? ''}
               onChange={(event) => setConfig({ ...config, session_url: event.target.value })}
@@ -751,22 +751,22 @@ export function SettingsPage() {
 
         <Card className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-display text-xl text-text">ATS Credentials</h2>
+            <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">ATS Credentials</h2>
             <Badge tone="info">{credentials.length}</Badge>
           </div>
-          <p className="text-xs text-muted">
+          <p className="text-xs text-gray-600 dark:text-gray-400">
             Used for Greenhouse/Lever/Workday login. Not used for LLM providers.
           </p>
 
           {credentials.length === 0 ? (
-            <p className="text-sm text-muted">No ATS credentials stored yet.</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">No ATS credentials stored yet.</p>
           ) : (
             <div className="space-y-2">
               {credentials.map((credential, index) => (
-                <div key={`${credential.domain}-${credential.username}-${index}`} className="flex items-center justify-between rounded-xl border border-border bg-elevated/60 px-3 py-2">
+                <div key={`${credential.domain}-${credential.username}-${index}`} className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/70">
                   <div>
-                    <p className="font-semibold text-text">{credential.domain}</p>
-                    <p className="text-xs text-muted">{credential.username}</p>
+                    <p className="font-semibold text-gray-900 dark:text-gray-100">{credential.domain}</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">{credential.username}</p>
                   </div>
                   <Button
                     variant="danger"
@@ -780,8 +780,8 @@ export function SettingsPage() {
             </div>
           )}
 
-          <form onSubmit={addCredential} className="space-y-2 rounded-xl border border-border bg-elevated/50 p-3">
-            <p className="text-sm font-semibold text-text">Add credential</p>
+          <form onSubmit={addCredential} className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Add credential</p>
             <Input
               placeholder="ATS domain (e.g. acme.greenhouse.io)"
               value={newCredential.domain}
@@ -805,23 +805,23 @@ export function SettingsPage() {
         </Card>
       </div>
 
-      <Card className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-display text-xl text-text">Scheduling</h2>
-          <Badge tone="default">{schedules.length} schedules</Badge>
-        </div>
+        <Card className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Scheduling</h2>
+            <Badge tone="default">{schedules.length} schedules</Badge>
+          </div>
 
         {schedules.length === 0 ? (
-          <p className="text-sm text-muted">No schedules configured yet.</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">No schedules configured yet.</p>
         ) : (
           <div className="space-y-2">
             {schedules.map((schedule) => (
-              <div key={schedule.id} className="grid grid-cols-1 gap-2 rounded-xl border border-border bg-elevated/60 px-3 py-2 md:grid-cols-[1.5fr_1fr_auto] md:items-center">
+              <div key={schedule.id} className="grid grid-cols-1 gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/70 md:grid-cols-[1.5fr_1fr_auto] md:items-center">
                 <div>
-                  <p className="font-semibold text-text">{schedule.name}</p>
-                  <p className="text-xs text-muted">{schedule.cron_expr} ({schedule.timezone})</p>
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">{schedule.name}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">{schedule.cron_expr} ({schedule.timezone})</p>
                 </div>
-                <p className="text-xs text-muted">
+                <p className="text-xs text-gray-600 dark:text-gray-400">
                   Next run: {schedule.next_run_at ? new Date(schedule.next_run_at).toLocaleString() : 'N/A'}
                 </p>
                 <div className="flex justify-start md:justify-end">
@@ -834,8 +834,8 @@ export function SettingsPage() {
           </div>
         )}
 
-        <form onSubmit={addSchedule} className="space-y-2 rounded-xl border border-border bg-elevated/50 p-3">
-          <p className="text-sm font-semibold text-text">Create schedule</p>
+        <form onSubmit={addSchedule} className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Create schedule</p>
           <div className="grid gap-2 md:grid-cols-2">
             <Input
               placeholder="Schedule name"

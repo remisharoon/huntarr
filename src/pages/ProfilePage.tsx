@@ -248,8 +248,8 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
       />
 
       <Card className="space-y-3">
-        <h2 className="font-display text-xl text-text">Resume Intelligence</h2>
-        <p className="text-sm text-muted">Upload a PDF resume to auto-populate your profile, extract profile photo, and regenerate a professional summary.</p>
+        <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Resume Intelligence</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400">Upload a PDF resume to auto-populate your profile, extract profile photo, and regenerate a professional summary.</p>
         <input
           ref={fileInputRef}
           type="file"
@@ -261,7 +261,7 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
             e.target.value = ''
           }}
         />
-        <div className="resume-upload-cta flex flex-wrap items-center gap-3 rounded-2xl border border-accent/40 bg-accent/10 p-4">
+        <div className="resume-upload-cta flex flex-wrap items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/50 dark:bg-blue-900/20">
           <Button
             type="button"
             variant="attention"
@@ -275,21 +275,21 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
           <Badge tone="info" className="gap-1">
             <Sparkles size={12} /> AI profile extraction
           </Badge>
-          {resumeStatus === 'uploading' && <span className="text-sm text-muted">Extracting identity, experience, education, skills, achievements, and links...</span>}
-          {resumeStatus === 'done' && <span className="text-sm text-success">Profile refreshed from {resumeFileName}</span>}
-          {resumeStatus === 'error' && <span className="text-sm text-danger">{resumeError}</span>}
+          {resumeStatus === 'uploading' && <span className="text-sm text-gray-600 dark:text-gray-400">Extracting identity, experience, education, skills, achievements, and links...</span>}
+          {resumeStatus === 'done' && <span className="text-sm text-green-700 dark:text-green-300">Profile refreshed from {resumeFileName}</span>}
+          {resumeStatus === 'error' && <span className="text-sm text-red-700 dark:text-red-300">{resumeError}</span>}
         </div>
 
         {form.profile_photo_path ? (
-          <div className="flex items-center gap-3 rounded-xl border border-border bg-elevated/50 p-3">
+          <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
             <img
               src={api.profilePhotoUrl(form.profile_photo_path)}
               alt="Extracted profile"
-              className="h-16 w-16 rounded-full border border-border object-cover"
+              className="h-16 w-16 rounded-full border border-gray-200 object-cover dark:border-gray-700"
             />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-text">Extracted profile photo ready for job applications</p>
-              <p className="truncate text-xs text-muted">{form.profile_photo_path}</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Extracted profile photo ready for job applications</p>
+              <p className="truncate text-xs text-gray-600 dark:text-gray-400">{form.profile_photo_path}</p>
             </div>
           </div>
         ) : null}
@@ -305,7 +305,7 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
                   <p className="text-sm font-medium truncate">
                     {form.resume_path.split('/').pop() || 'resume.pdf'}
                   </p>
-                  <p className="text-xs text-muted">Uploaded resume will be used for applications</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">Uploaded resume will be used for applications</p>
                 </div>
                 <Button
                   variant="secondary"
@@ -350,7 +350,7 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
                   }}
                   placeholder="Upload resume PDF (optional)"
                 />
-                <p className="text-xs text-muted mt-1">
+                <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
                   Upload a resume PDF to use for job applications (overrides generated resume)
                 </p>
               </div>
@@ -360,7 +360,7 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
       </Card>
 
       <Card className="space-y-4">
-        <h2 className="font-display text-xl text-text">Identity</h2>
+        <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Identity</h2>
         <div className="grid gap-3 md:grid-cols-2">
           <Input
             placeholder="Full name"
@@ -393,34 +393,34 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
       </Card>
 
       <Card className="space-y-4">
-        <h2 className="font-display text-xl text-text">Job Preferences</h2>
-        <p className="text-sm text-muted">Used for job discovery when starting hunts. Override defaults from resume if needed.</p>
+        <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Job Preferences</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400">Used for job discovery when starting hunts. Override defaults from resume if needed.</p>
         <div className="grid gap-3 md:grid-cols-2">
           <div>
-            <label className="text-sm font-semibold text-text">Desired Job Title</label>
+            <label className="text-sm font-semibold text-gray-900 dark:text-gray-100">Desired Job Title</label>
             <Input
               placeholder="e.g. Software Engineer, Backend Developer"
               value={form.desired_job_title ?? ''}
               onChange={(event) => setForm((prev) => ({ ...prev, desired_job_title: event.target.value }))}
               className="mt-1"
             />
-            <p className="mt-1 text-xs text-muted">Defaults from most recent job title in resume</p>
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">Defaults from most recent job title in resume</p>
           </div>
           <div>
-            <label className="text-sm font-semibold text-text">Desired Location</label>
+            <label className="text-sm font-semibold text-gray-900 dark:text-gray-100">Desired Location</label>
             <Input
               placeholder="e.g. Remote, San Francisco, New York"
               value={form.desired_location ?? ''}
               onChange={(event) => setForm((prev) => ({ ...prev, desired_location: event.target.value }))}
               className="mt-1"
             />
-            <p className="mt-1 text-xs text-muted">Defaults from resume location</p>
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">Defaults from resume location</p>
           </div>
         </div>
       </Card>
 
       <Card className="space-y-4">
-        <h2 className="font-display text-xl text-text">Professional Summary</h2>
+        <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Professional Summary</h2>
         <Input
           placeholder="Skills (comma separated)"
           value={form.skills.join(', ')}
@@ -436,12 +436,12 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
 
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="font-display text-xl text-text">Experience</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Experience</h2>
           <Button type="button" variant="secondary" onClick={() => addSectionItem('experience')}>
             <Plus size={14} /> Add
           </Button>
         </div>
-        {form.experience.length === 0 ? <p className="text-sm text-muted">No experience entries yet.</p> : null}
+        {form.experience.length === 0 ? <p className="text-sm text-gray-600 dark:text-gray-400">No experience entries yet.</p> : null}
         {form.experience.map((item, index) => (
           <Card key={`exp-${index}`} variant="muted" className="space-y-3">
             <div className="grid gap-3 md:grid-cols-2">
@@ -462,12 +462,12 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
 
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="font-display text-xl text-text">Education</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Education</h2>
           <Button type="button" variant="secondary" onClick={() => addSectionItem('education')}>
             <Plus size={14} /> Add
           </Button>
         </div>
-        {form.education.length === 0 ? <p className="text-sm text-muted">No education entries yet.</p> : null}
+        {form.education.length === 0 ? <p className="text-sm text-gray-600 dark:text-gray-400">No education entries yet.</p> : null}
         {form.education.map((item, index) => (
           <Card key={`edu-${index}`} variant="muted" className="space-y-3">
             <div className="grid gap-3 md:grid-cols-3">
@@ -487,12 +487,12 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
 
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="font-display text-xl text-text">Projects</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Projects</h2>
           <Button type="button" variant="secondary" onClick={() => addSectionItem('projects')}>
             <Plus size={14} /> Add
           </Button>
         </div>
-        {form.projects.length === 0 ? <p className="text-sm text-muted">No projects entries yet.</p> : null}
+        {form.projects.length === 0 ? <p className="text-sm text-gray-600 dark:text-gray-400">No projects entries yet.</p> : null}
         {form.projects.map((item, index) => (
           <Card key={`proj-${index}`} variant="muted" className="space-y-3">
             <div className="grid gap-3 md:grid-cols-2">
@@ -520,12 +520,12 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
 
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="font-display text-xl text-text">Awards</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Awards</h2>
           <Button type="button" variant="secondary" onClick={() => addSectionItem('awards')}>
             <Plus size={14} /> Add
           </Button>
         </div>
-        {form.awards.length === 0 ? <p className="text-sm text-muted">No award entries yet.</p> : null}
+        {form.awards.length === 0 ? <p className="text-sm text-gray-600 dark:text-gray-400">No award entries yet.</p> : null}
         {form.awards.map((item, index) => (
           <Card key={`award-${index}`} variant="muted" className="space-y-3">
             <div className="grid gap-3 md:grid-cols-3">
@@ -545,12 +545,12 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
 
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="font-display text-xl text-text">Certifications</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Certifications</h2>
           <Button type="button" variant="secondary" onClick={() => addSectionItem('certifications')}>
             <Plus size={14} /> Add
           </Button>
         </div>
-        {form.certifications.length === 0 ? <p className="text-sm text-muted">No certification entries yet.</p> : null}
+        {form.certifications.length === 0 ? <p className="text-sm text-gray-600 dark:text-gray-400">No certification entries yet.</p> : null}
         {form.certifications.map((item, index) => (
           <Card key={`cert-${index}`} variant="muted" className="space-y-3">
             <div className="grid gap-3 md:grid-cols-2">
@@ -571,12 +571,12 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
 
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="font-display text-xl text-text">Languages</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Languages</h2>
           <Button type="button" variant="secondary" onClick={() => addSectionItem('languages')}>
             <Plus size={14} /> Add
           </Button>
         </div>
-        {form.languages.length === 0 ? <p className="text-sm text-muted">No language entries yet.</p> : null}
+        {form.languages.length === 0 ? <p className="text-sm text-gray-600 dark:text-gray-400">No language entries yet.</p> : null}
         {form.languages.map((item, index) => (
           <Card key={`lang-${index}`} variant="muted" className="space-y-3">
             <div className="grid gap-3 md:grid-cols-2">
@@ -594,12 +594,12 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
 
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="font-display text-xl text-text">Links</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Links</h2>
           <Button type="button" variant="secondary" onClick={() => addSectionItem('links')}>
             <Plus size={14} /> Add
           </Button>
         </div>
-        {form.links.length === 0 ? <p className="text-sm text-muted">No link entries yet.</p> : null}
+        {form.links.length === 0 ? <p className="text-sm text-gray-600 dark:text-gray-400">No link entries yet.</p> : null}
         {form.links.map((item, index) => (
           <Card key={`link-${index}`} variant="muted" className="space-y-3">
             <div className="grid gap-3 md:grid-cols-2">
@@ -616,8 +616,8 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
       </Card>
 
       <div className="sticky bottom-3 z-10 flex justify-end">
-        <Card className="inline-flex items-center gap-3 rounded-2xl border-border bg-surface/95 p-3 shadow-panel">
-          <p className="text-xs text-muted">Changes are applied to profile API on save.</p>
+        <Card className="inline-flex items-center gap-3 rounded-2xl border border-gray-200 bg-white/95 p-3 shadow-sm dark:border-gray-800 dark:bg-gray-950/90">
+          <p className="text-xs text-gray-600 dark:text-gray-400">Changes are applied to profile API on save.</p>
           <Button type="submit" disabled={saving}>
             {saving ? 'Saving...' : 'Save Profile'}
           </Button>

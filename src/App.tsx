@@ -1,9 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
   Briefcase,
-  Command,
-  Keyboard,
   Menu,
   Moon,
   PlayCircle,
@@ -18,7 +16,7 @@ import {
 } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
-import { Badge, Button, Card, IconButton, Kbd } from './components/ui'
+import { Button, Card, IconButton } from './components/ui'
 import { api } from './lib/api'
 import { ApplicationDetailPage } from './pages/ApplicationDetailPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -130,15 +128,11 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const [showShortcuts, setShowShortcuts] = useState(false)
   const [themeMode, setThemeMode] = useState<ThemeMode>(getStoredTheme)
   const [systemTheme, setSystemTheme] = useState<'dark' | 'light'>(() => {
     if (typeof window === 'undefined') return 'dark'
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   })
-
-  const goPrefixActive = useRef(false)
-  const goPrefixTimer = useRef<number | null>(null)
 
   const refresh = async () => {
     try {
@@ -178,8 +172,7 @@ export default function App() {
 
   useEffect(() => {
     const root = document.documentElement
-    root.classList.remove('theme-dark', 'theme-light')
-    root.classList.add(resolvedTheme === 'dark' ? 'theme-dark' : 'theme-light')
+    root.classList.toggle('dark', resolvedTheme === 'dark')
 
     if (themeMode === 'system') {
       window.localStorage.removeItem('huntarr.theme')
@@ -191,80 +184,6 @@ export default function App() {
   useEffect(() => {
     setMobileNavOpen(false)
   }, [location.pathname])
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      const isTypingTarget =
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        !!target?.closest('[contenteditable=true]')
-
-      if (event.key === '?' && !isTypingTarget) {
-        event.preventDefault()
-        setShowShortcuts((prev) => !prev)
-        return
-      }
-
-      if (isTypingTarget) return
-
-      const key = event.key.toLowerCase()
-
-      if (goPrefixActive.current) {
-        goPrefixActive.current = false
-        if (goPrefixTimer.current) {
-          window.clearTimeout(goPrefixTimer.current)
-          goPrefixTimer.current = null
-        }
-
-        if (key === 'r') {
-          navigate('/runs')
-          return
-        }
-        if (key === 'j') {
-          navigate('/jobs')
-          return
-        }
-        if (key === 'd') {
-          navigate('/')
-          return
-        }
-      }
-
-      if (key === 'g') {
-        goPrefixActive.current = true
-        if (goPrefixTimer.current) window.clearTimeout(goPrefixTimer.current)
-        goPrefixTimer.current = window.setTimeout(() => {
-          goPrefixActive.current = false
-          goPrefixTimer.current = null
-        }, 1000)
-        return
-      }
-
-      if (key === 'f' && view === 'runs') {
-        window.dispatchEvent(new Event('huntarr:focus-runs-search'))
-      }
-
-      if (key === '/') {
-        event.preventDefault()
-        navigate('/runs')
-        window.setTimeout(() => window.dispatchEvent(new Event('huntarr:focus-runs-search')), 0)
-      }
-
-      if (key === 'escape') {
-        setMobileNavOpen(false)
-      }
-    }
-
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-      if (goPrefixTimer.current) window.clearTimeout(goPrefixTimer.current)
-    }
-  }, [navigate, view])
-
-  const latestRunId = useMemo(() => (runs[0]?.id ? String(runs[0].id) : null), [runs])
 
   const startHunt = async () => {
     setBusy(true)
@@ -362,9 +281,9 @@ export default function App() {
 
   const ShellNav = ({ mobile = false }: { mobile?: boolean }) => (
     <div className="flex h-full flex-col">
-      <div className="border-b border-border px-4 py-5">
-        <p className="font-display text-2xl text-text">huntarr</p>
-        <p className="mt-1 text-xs uppercase tracking-[0.2em] text-muted">control center</p>
+      <div className="border-b border-gray-200 px-4 py-5 dark:border-gray-800">
+        <p className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">huntarr</p>
+        <p className="mt-1 text-xs uppercase tracking-[0.2em] text-gray-500 dark:text-gray-400">control center</p>
       </div>
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navItems.map((item) => {
@@ -379,10 +298,10 @@ export default function App() {
                 if (mobile) setMobileNavOpen(false)
               }}
               className={[
-                'group flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-app',
+                'group flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950',
                 active
-                  ? 'border-accent/45 bg-accent/15 text-accent'
-                  : 'border-transparent text-muted hover:border-border hover:bg-elevated hover:text-text',
+                  ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-300'
+                  : 'border-transparent text-gray-600 hover:border-gray-200 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-100',
               ].join(' ')}
             >
               <Icon size={17} />
@@ -391,31 +310,23 @@ export default function App() {
           )
         })}
       </nav>
-      <div className="space-y-2 border-t border-border p-3 text-xs text-muted">
-        <div className="rounded-lg border border-border bg-elevated/60 p-2.5">
-          <p className="font-semibold text-text">Shortcuts</p>
-          <p className="mt-1">
-            <Kbd>g</Kbd> + <Kbd>r</Kbd> pipelines
-          </p>
-          <p className="mt-1">
-            <Kbd>?</Kbd> full map
-          </p>
-        </div>
+      <div className="border-t border-gray-200 p-3 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+        <p>Live control plane for runs, jobs, and manual actions.</p>
       </div>
     </div>
   )
 
   return (
-    <div className="app-frame text-text">
-      <div className="app-shell">
-        <aside className="app-rail motion-sidebar hidden w-72 shrink-0 md:block">
+    <div className="min-h-screen p-3 md:p-5">
+      <div className="mx-auto flex min-h-[calc(100vh-1.5rem)] max-w-7xl gap-4 md:min-h-[calc(100vh-2.5rem)]">
+        <aside className="hidden w-64 shrink-0 rounded-xl border border-gray-200 bg-white shadow-sm md:block dark:border-gray-800 dark:bg-gray-950/70">
           <ShellNav />
         </aside>
 
         {mobileNavOpen ? (
           <div className="fixed inset-0 z-50 md:hidden">
             <button type="button" className="absolute inset-0 bg-black/55" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation overlay" />
-            <aside className="motion-sidebar relative h-full w-[84%] max-w-xs rounded-r-2xl border border-[var(--shell-border-strong)] bg-surface">
+            <aside className="relative h-full w-[84%] max-w-xs rounded-r-xl border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950">
               <div className="absolute right-3 top-3">
                 <IconButton title="Close menu" onClick={() => setMobileNavOpen(false)}>
                   <X size={18} />
@@ -426,8 +337,8 @@ export default function App() {
           </div>
         ) : null}
 
-        <div className="app-content-surface">
-          <header className="sticky top-[var(--shell-gap)] z-20 mx-3 mt-3 rounded-2xl border border-border bg-app/95 px-5 py-3 backdrop-blur md:mx-4 md:px-7">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="sticky top-3 z-20 rounded-xl border border-gray-200 bg-white/90 px-4 py-3 backdrop-blur-sm md:px-6 dark:border-gray-800 dark:bg-gray-950/85">
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
                 <div className="md:hidden">
@@ -436,19 +347,19 @@ export default function App() {
                   </IconButton>
                 </div>
                 {view === 'job-detail' || view === 'application-detail' || view === 'run-detail' ? (
-                  <Button variant="ghost" className="hidden border border-border text-xs sm:inline-flex" onClick={view === 'run-detail' ? onBackToRuns : onBack}>
+                  <Button variant="ghost" className="hidden border border-gray-200 text-xs dark:border-gray-700 sm:inline-flex" onClick={view === 'run-detail' ? onBackToRuns : onBack}>
                     <ArrowLeft size={14} /> Back
                   </Button>
                 ) : null}
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-text md:text-base">{titleMeta.title}</p>
-                  <p className="hidden truncate text-xs text-muted md:block">{titleMeta.subtitle}</p>
+                  <p className="truncate text-sm font-semibold text-gray-900 md:text-base dark:text-gray-100">{titleMeta.title}</p>
+                  <p className="hidden truncate text-xs text-gray-600 md:block dark:text-gray-400">{titleMeta.subtitle}</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <Button variant="secondary" className="hidden text-xs md:inline-flex" onClick={openRunsSearch}>
-                  <Search size={14} /> Quick Search <Kbd>/</Kbd>
+                  <Search size={14} /> Quick Search
                 </Button>
                 <IconButton
                   title="Toggle theme"
@@ -471,112 +382,60 @@ export default function App() {
                   />
                 </IconButton>
                 {themeMode !== 'system' ? (
-                  <Button variant="ghost" className="hidden border border-border text-xs lg:inline-flex" onClick={() => setThemeMode('system')}>
+                  <Button variant="ghost" className="hidden border border-gray-200 text-xs dark:border-gray-700 lg:inline-flex" onClick={() => setThemeMode('system')}>
                     System
                   </Button>
                 ) : null}
-                <IconButton title="Show keyboard shortcuts" onClick={() => setShowShortcuts(true)}>
-                  <Keyboard size={16} />
-                </IconButton>
                 <IconButton title="Refresh" onClick={refresh}>
                   <RefreshCw size={16} />
                 </IconButton>
-                <Button onClick={startHunt} disabled={busy} className="text-xs sm:text-sm">
+                <Button variant="attention" onClick={startHunt} disabled={busy} className="text-xs sm:text-sm">
                   Start Hunt
                 </Button>
-                <span className="hidden h-9 w-9 items-center justify-center rounded-full border border-border bg-elevated text-xs font-bold text-muted sm:inline-flex">
+                <span className="hidden h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-bold text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 sm:inline-flex">
                   HR
                 </span>
               </div>
             </div>
           </header>
 
-          <main className="flex-1 px-3 pb-3 pt-[var(--shell-gap)] md:px-4 md:pb-4">
-            <div className="motion-enter rounded-[calc(var(--shell-radius)-8px)] border border-border bg-surface/95 p-4 shadow-panel md:p-6">
-              <div className="mb-4 flex flex-wrap items-center gap-2">
-                {latestRunId ? <Badge tone="info">Latest run {latestRunId.slice(0, 10)}</Badge> : null}
-                <Badge tone="default">Theme: {themeMode === 'system' ? `system (${resolvedTheme})` : themeMode}</Badge>
-                <Badge tone="success">Auto refresh 8s</Badge>
-              </div>
+          <main className="motion-enter mt-4 flex-1 rounded-xl border border-gray-200 bg-white/80 p-4 shadow-sm md:p-6 dark:border-gray-800 dark:bg-gray-950/60">
+            {error ? <Card className="mb-4 border-red-200 text-red-700 dark:border-red-900/50 dark:text-red-300" variant="muted">{error}</Card> : null}
 
-              {error ? <Card className="mb-4 border-danger text-danger" variant="muted">{error}</Card> : null}
-
-              {view === 'dashboard' ? <DashboardPage runs={runs} jobs={jobs} manualActions={manualActions} applications={applications} /> : null}
-              {view === 'jobs' ? <JobsPage jobs={jobs} counts={jobsCounts} onApplyNow={onApplyNow} onViewJob={onViewJob} onDeleteAll={onDeleteAll} /> : null}
-              {view === 'manual' ? <ManualQueuePage actions={manualActions} onStart={onStartManual} onResolve={onResolveManual} /> : null}
-              {view === 'profile' ? (
-                <ProfilePage
-                  profile={profile}
-                  onSave={async (payload) => {
-                    await api.saveProfile(payload)
-                    await refresh()
-                  }}
-                />
-              ) : null}
-              {view === 'runs' ? (
-                <RunsPage
-                  runs={runs}
-                  jobs={jobs}
-                  applications={applications}
-                  manualActions={manualActions}
-                  onSelectRun={onSelectRun}
-                  onPauseRun={onPauseRun}
-                  onResumeRun={onResumeRun}
-                />
-              ) : null}
-              {view === 'settings' ? <SettingsPage /> : null}
-              {view === 'job-detail' && routeState.selectedJobId ? (
-                <JobDetailPage jobId={routeState.selectedJobId} onBack={onBack} onViewApplication={onViewApplication} />
-              ) : null}
-              {view === 'application-detail' && routeState.selectedApplicationId ? (
-                <ApplicationDetailPage applicationId={routeState.selectedApplicationId} onBack={onBack} />
-              ) : null}
-              {view === 'run-detail' && routeState.selectedRunId ? <RunDetailPage runId={routeState.selectedRunId} onBack={onBackToRuns} /> : null}
-            </div>
+            {view === 'dashboard' ? <DashboardPage runs={runs} jobs={jobs} manualActions={manualActions} applications={applications} /> : null}
+            {view === 'jobs' ? <JobsPage jobs={jobs} counts={jobsCounts} onApplyNow={onApplyNow} onViewJob={onViewJob} onDeleteAll={onDeleteAll} /> : null}
+            {view === 'manual' ? <ManualQueuePage actions={manualActions} onStart={onStartManual} onResolve={onResolveManual} /> : null}
+            {view === 'profile' ? (
+              <ProfilePage
+                profile={profile}
+                onSave={async (payload) => {
+                  await api.saveProfile(payload)
+                  await refresh()
+                }}
+              />
+            ) : null}
+            {view === 'runs' ? (
+              <RunsPage
+                runs={runs}
+                jobs={jobs}
+                applications={applications}
+                manualActions={manualActions}
+                onSelectRun={onSelectRun}
+                onPauseRun={onPauseRun}
+                onResumeRun={onResumeRun}
+              />
+            ) : null}
+            {view === 'settings' ? <SettingsPage /> : null}
+            {view === 'job-detail' && routeState.selectedJobId ? (
+              <JobDetailPage jobId={routeState.selectedJobId} onBack={onBack} onViewApplication={onViewApplication} />
+            ) : null}
+            {view === 'application-detail' && routeState.selectedApplicationId ? (
+              <ApplicationDetailPage applicationId={routeState.selectedApplicationId} onBack={onBack} />
+            ) : null}
+            {view === 'run-detail' && routeState.selectedRunId ? <RunDetailPage runId={routeState.selectedRunId} onBack={onBackToRuns} /> : null}
           </main>
         </div>
       </div>
-
-      {showShortcuts ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4">
-          <Card className="w-full max-w-xl border-border bg-surface p-5" variant="panel">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-display text-xl text-text">Keyboard Shortcuts</h2>
-              <IconButton title="Close shortcuts" onClick={() => setShowShortcuts(false)}>
-                <X size={16} />
-              </IconButton>
-            </div>
-            <div className="space-y-2 text-sm text-muted">
-              <p>
-                <Kbd>g</Kbd> then <Kbd>r</Kbd>: go to Pipelines (Runs)
-              </p>
-              <p>
-                <Kbd>g</Kbd> then <Kbd>j</Kbd>: go to Jobs
-              </p>
-              <p>
-                <Kbd>g</Kbd> then <Kbd>d</Kbd>: go to Overview
-              </p>
-              <p>
-                <Kbd>f</Kbd>: focus run search (from Runs page)
-              </p>
-              <p>
-                <Kbd>/</Kbd>: jump to runs search
-              </p>
-              <p>
-                <Kbd>?</Kbd>: open/close shortcuts dialog
-              </p>
-              <p>
-                <Kbd>Esc</Kbd>: close overlays and run row focus
-              </p>
-            </div>
-            <div className="mt-5 flex justify-end">
-              <Button variant="secondary" onClick={() => setShowShortcuts(false)}>
-                <Command size={14} /> Close
-              </Button>
-            </div>
-          </Card>
-        </div>
-      ) : null}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MoreHorizontal, PauseCircle, PlayCircle, RotateCcw, Wrench } from 'lucide-react'
 import type { Run, RunFilterState, RunSortKey, SortDirection } from '../types'
 import { Badge, Button, Card, IconButton, PageHeader, SegmentedControl } from '../components/ui'
@@ -57,7 +57,6 @@ export function RunsPage({ runs, jobs, applications, manualActions, onSelectRun,
   const [sortKey, setSortKey] = useState<RunSortKey>('started_at')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
-  const [focusedIndex, setFocusedIndex] = useState<number>(-1)
   const [busyRunId, setBusyRunId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -114,17 +113,6 @@ export function RunsPage({ runs, jobs, applications, manualActions, onSelectRun,
     return sorted
   }, [filters, runs, sortDirection, sortKey])
 
-  useEffect(() => {
-    if (!filteredAndSortedRuns.length) {
-      setFocusedIndex(-1)
-      return
-    }
-
-    if (focusedIndex >= filteredAndSortedRuns.length) {
-      setFocusedIndex(filteredAndSortedRuns.length - 1)
-    }
-  }, [filteredAndSortedRuns, focusedIndex])
-
   const toggleExpanded = (runId: string) => {
     setExpandedRows((previous) => {
       const next = new Set(previous)
@@ -153,52 +141,8 @@ export function RunsPage({ runs, jobs, applications, manualActions, onSelectRun,
     }
   }
 
-  const onGridKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement
-    const isTypingTarget =
-      target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement ||
-      target instanceof HTMLSelectElement ||
-      !!target.closest('button')
-
-    if (event.key.toLowerCase() === 'f' && !isTypingTarget) {
-      event.preventDefault()
-      searchRef.current?.focus()
-      return
-    }
-
-    if (!filteredAndSortedRuns.length || isTypingTarget) return
-
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      setFocusedIndex((prev) => (prev < 0 ? 0 : Math.min(prev + 1, filteredAndSortedRuns.length - 1)))
-      return
-    }
-
-    if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      setFocusedIndex((prev) => Math.max(prev - 1, 0))
-      return
-    }
-
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      const run = filteredAndSortedRuns[focusedIndex]
-      if (run) {
-        toggleExpanded(run.id)
-      }
-      return
-    }
-
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      setFocusedIndex(-1)
-      setExpandedRows(new Set())
-    }
-  }
-
   return (
-    <div className="space-y-4" tabIndex={0} onKeyDown={onGridKeyDown}>
+    <div className="space-y-4">
       <PageHeader
         title="Pipelines (Runs)"
         subtitle="Dense pipeline table with filtering, sort controls, and expandable run insight rows."
@@ -211,12 +155,12 @@ export function RunsPage({ runs, jobs, applications, manualActions, onSelectRun,
             value={filters.query}
             onChange={(event) => setFilters({ ...filters, query: event.target.value })}
             placeholder="Search by run id or current node"
-            className="w-full rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]"
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-400"
           />
           <select
             value={filters.status}
             onChange={(event) => setFilters({ ...filters, status: event.target.value as RunFilterState['status'] })}
-            className="rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]"
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
           >
             <option value="all">All statuses</option>
             <option value="queued">Queued</option>
@@ -228,7 +172,7 @@ export function RunsPage({ runs, jobs, applications, manualActions, onSelectRun,
           <select
             value={filters.mode}
             onChange={(event) => setFilters({ ...filters, mode: event.target.value as RunFilterState['mode'] })}
-            className="rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]"
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
           >
             <option value="all">All modes</option>
             <option value="manual">Manual</option>
@@ -237,7 +181,7 @@ export function RunsPage({ runs, jobs, applications, manualActions, onSelectRun,
           <select
             value={filters.dateScope}
             onChange={(event) => setFilters({ ...filters, dateScope: event.target.value as RunFilterState['dateScope'] })}
-            className="rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]"
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
           >
             <option value="all">All time</option>
             <option value="24h">Last 24 hours</option>
@@ -265,14 +209,14 @@ export function RunsPage({ runs, jobs, applications, manualActions, onSelectRun,
             ]}
           />
           <Badge tone="default">{filteredAndSortedRuns.length} rows</Badge>
-          <p className="text-xs text-muted">Use Up/Down + Enter, press f to focus search.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Updated every 8 seconds.</p>
         </div>
 
-        {actionError ? <p className="text-sm text-danger">{actionError}</p> : null}
+        {actionError ? <p className="text-sm text-red-700 dark:text-red-300">{actionError}</p> : null}
       </Card>
 
       <Card className="overflow-hidden p-0">
-        <div className="hidden grid-cols-[1.4fr_0.8fr_0.8fr_1.2fr_1fr_0.8fr_auto] gap-2 border-b border-border bg-elevated/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted md:grid">
+        <div className="hidden grid-cols-[1.4fr_0.8fr_0.8fr_1.2fr_1fr_0.8fr_auto] gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500 dark:border-gray-800 dark:bg-gray-900/70 dark:text-gray-400 md:grid">
           <span>Pipeline</span>
           <span>Status</span>
           <span>Workflow/Mode</span>
@@ -283,37 +227,35 @@ export function RunsPage({ runs, jobs, applications, manualActions, onSelectRun,
         </div>
 
         {filteredAndSortedRuns.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-muted">No runs match this filter combination.</div>
+          <div className="px-4 py-8 text-center text-sm text-gray-600 dark:text-gray-400">No runs match this filter combination.</div>
         ) : (
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-gray-200 dark:divide-gray-800">
             {filteredAndSortedRuns.map((run, index) => {
               const isExpanded = expandedRows.has(run.id)
-              const isFocused = focusedIndex === index
               const duration = getDurationSeconds(run)
               const relatedApplications = applications.filter((application) => application.run_id === run.id)
               const relatedManual = manualActions.filter((action) => action.run_id === run.id)
               const relatedJobs = jobs.filter((job) => job.run_id === run.id || job.last_run_id === run.id)
 
               return (
-                <div key={run.id} className={cn('transition', isFocused ? 'bg-accent/10' : 'bg-transparent')}>
+                <div key={run.id} className="transition">
                   <div
                     className="grid w-full grid-cols-1 gap-2 px-4 py-3 text-left md:grid-cols-[1.4fr_0.8fr_0.8fr_1.2fr_1fr_0.8fr_auto] md:items-center"
                     onClick={() => {
-                      setFocusedIndex(index)
                       toggleExpanded(run.id)
                     }}
                   >
                     <div>
-                      <p className="font-semibold text-text">Run {String(run.id).slice(0, 10)}</p>
-                      <p className="text-xs text-muted">{run.error ? `Error: ${run.error}` : 'No run error'}</p>
+                      <p className="font-semibold text-gray-900 dark:text-gray-100">Run {String(run.id).slice(0, 10)}</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">{run.error ? `Error: ${run.error}` : 'No run error'}</p>
                     </div>
                     <div>
                       <Badge tone={statusTone(run.status)}>{run.status}</Badge>
                     </div>
-                    <p className="text-sm text-muted">{run.mode}</p>
-                    <p className="truncate text-sm text-muted">{run.current_node || 'N/A'}</p>
-                    <p className="text-sm text-muted">{formatDate(run.started_at || run.updated_at)}</p>
-                    <p className="text-sm text-muted">{formatDuration(duration)}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{run.mode}</p>
+                    <p className="truncate text-sm text-gray-600 dark:text-gray-400">{run.current_node || 'N/A'}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{formatDate(run.started_at || run.updated_at)}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{formatDuration(duration)}</p>
                     <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
                       {run.status === 'running' ? (
                         <IconButton
@@ -336,7 +278,7 @@ export function RunsPage({ runs, jobs, applications, manualActions, onSelectRun,
                       <button
                         type="button"
                         title="Coming soon"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent text-muted transition hover:bg-elevated"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent text-gray-500 transition hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
                       >
                         <RotateCcw size={15} />
                         <span className="sr-only">Coming soon</span>
@@ -344,7 +286,7 @@ export function RunsPage({ runs, jobs, applications, manualActions, onSelectRun,
                       <button
                         type="button"
                         title="Coming soon"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent text-muted transition hover:bg-elevated"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent text-gray-500 transition hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
                       >
                         <Wrench size={15} />
                         <span className="sr-only">Coming soon</span>
@@ -352,7 +294,7 @@ export function RunsPage({ runs, jobs, applications, manualActions, onSelectRun,
                       <button
                         type="button"
                         title="Coming soon"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent text-muted transition hover:bg-elevated"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent text-gray-500 transition hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
                       >
                         <MoreHorizontal size={15} />
                         <span className="sr-only">Coming soon</span>
@@ -366,23 +308,23 @@ export function RunsPage({ runs, jobs, applications, manualActions, onSelectRun,
                       isExpanded ? 'mb-3 grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
                     )}
                   >
-                    <div className="min-h-0 overflow-hidden rounded-xl border border-border bg-elevated/70 p-3">
+                    <div className="min-h-0 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/70">
                       <div className="grid gap-3 md:grid-cols-4">
                         <div>
-                          <p className="text-xs uppercase tracking-[0.1em] text-muted">Jobs</p>
-                          <p className="mt-1 text-sm font-semibold text-text">{relatedJobs.length || run.metrics.discovered || 0}</p>
+                          <p className="text-xs uppercase tracking-[0.1em] text-gray-500 dark:text-gray-400">Jobs</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{relatedJobs.length || run.metrics.discovered || 0}</p>
                         </div>
                         <div>
-                          <p className="text-xs uppercase tracking-[0.1em] text-muted">Applications</p>
-                          <p className="mt-1 text-sm font-semibold text-text">{relatedApplications.length || run.metrics.applied}</p>
+                          <p className="text-xs uppercase tracking-[0.1em] text-gray-500 dark:text-gray-400">Applications</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{relatedApplications.length || run.metrics.applied}</p>
                         </div>
                         <div>
-                          <p className="text-xs uppercase tracking-[0.1em] text-muted">Manual actions</p>
-                          <p className="mt-1 text-sm font-semibold text-text">{relatedManual.length || run.metrics.manual_required}</p>
+                          <p className="text-xs uppercase tracking-[0.1em] text-gray-500 dark:text-gray-400">Manual actions</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{relatedManual.length || run.metrics.manual_required}</p>
                         </div>
                         <div>
-                          <p className="text-xs uppercase tracking-[0.1em] text-muted">Failed</p>
-                          <p className="mt-1 text-sm font-semibold text-text">{run.metrics.failed}</p>
+                          <p className="text-xs uppercase tracking-[0.1em] text-gray-500 dark:text-gray-400">Failed</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{run.metrics.failed}</p>
                         </div>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">

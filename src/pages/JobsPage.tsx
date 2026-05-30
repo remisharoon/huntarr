@@ -99,10 +99,10 @@ export function JobsPage({
         <button
           type="button"
           onClick={() => setStatusFilter('all')}
-          className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+          className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
             statusFilter === 'all'
-              ? 'border border-accent/55 bg-accent text-white'
-              : 'border border-border bg-elevated text-muted hover:bg-surface hover:text-text'
+              ? 'border border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-300'
+              : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100'
           }`}
         >
           All ({counts.total})
@@ -110,10 +110,10 @@ export function JobsPage({
         <button
           type="button"
           onClick={() => setStatusFilter('new')}
-          className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+          className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
             statusFilter === 'new'
-              ? 'border border-accent/55 bg-accent text-white'
-              : 'border border-border bg-elevated text-muted hover:bg-surface hover:text-text'
+              ? 'border border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-300'
+              : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100'
           }`}
         >
           New ({counts.new})
@@ -121,10 +121,10 @@ export function JobsPage({
         <button
           type="button"
           onClick={() => setStatusFilter('queued')}
-          className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+          className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
             statusFilter === 'queued'
-              ? 'border border-accent/55 bg-accent text-white'
-              : 'border border-border bg-elevated text-muted hover:bg-surface hover:text-text'
+              ? 'border border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-300'
+              : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100'
           }`}
         >
           Queued ({counts.queued})
@@ -132,10 +132,10 @@ export function JobsPage({
         <button
           type="button"
           onClick={() => setStatusFilter('applied')}
-          className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+          className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
             statusFilter === 'applied'
-              ? 'border border-accent/55 bg-accent text-white'
-              : 'border border-border bg-elevated text-muted hover:bg-surface hover:text-text'
+              ? 'border border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-300'
+              : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100'
           }`}
         >
           Applied ({counts.applied})
@@ -143,7 +143,7 @@ export function JobsPage({
       </div>
 
       <Card className="overflow-hidden p-0">
-        <div className="hidden grid-cols-[1.7fr_1fr_0.6fr_0.9fr_1fr_0.8fr_auto] gap-2 border-b border-border bg-elevated/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted md:grid">
+        <div className="hidden grid-cols-[1.7fr_1fr_0.6fr_0.9fr_1fr_0.8fr_auto] gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500 dark:border-gray-800 dark:bg-gray-900/70 dark:text-gray-400 md:grid">
           <span>Role</span>
           <span>Company</span>
           <span>Score</span>
@@ -154,9 +154,9 @@ export function JobsPage({
         </div>
 
         {filteredJobs.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-muted">No jobs match this filter.</div>
+          <div className="px-4 py-8 text-center text-sm text-gray-600 dark:text-gray-400">No jobs match this filter.</div>
         ) : (
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-gray-200 dark:divide-gray-800">
             {filteredJobs.map((job) => {
               const score = Math.round(((job.score ?? 0) as number) * 100) / 100
               return (
@@ -166,11 +166,11 @@ export function JobsPage({
                     className="text-left"
                     onClick={() => onViewJob(job.id)}
                   >
-                    <p className="truncate font-semibold text-text">{job.title || 'Untitled role'}</p>
-                    <p className="mt-1 text-xs text-muted md:hidden">{job.company || 'Unknown company'}</p>
+                    <p className="truncate font-semibold text-gray-900 dark:text-gray-100">{job.title || 'Untitled role'}</p>
+                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-400 md:hidden">{job.company || 'Unknown company'}</p>
                   </button>
 
-                  <p className="hidden text-sm text-text md:block">{job.company || 'Unknown company'}</p>
+                  <p className="hidden text-sm text-gray-900 dark:text-gray-100 md:block">{job.company || 'Unknown company'}</p>
 
                   <div>
                     <Badge tone={score >= 0.75 ? 'success' : score >= 0.5 ? 'warning' : 'default'}>
@@ -182,9 +182,9 @@ export function JobsPage({
                     {getStatusBadge(job.status || 'new')}
                   </div>
 
-                  <p className="text-sm text-muted">{job.location || 'N/A'}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{job.location || 'N/A'}</p>
 
-                  <p className="text-sm text-muted">{job.source || 'unknown'}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{job.source || 'unknown'}</p>
 
                   <div className="flex items-center justify-start gap-1 md:justify-end">
                     <Button
@@ -216,10 +216,10 @@ export function JobsPage({
 
       {/* Delete Confirmation Dialog */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="max-w-md w-full mx-4 p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <Card className="mx-4 w-full max-w-md p-6">
             <h3 className="text-lg font-semibold mb-2">Delete All Jobs</h3>
-            <p className="text-sm text-muted mb-6">
+            <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
               Are you sure you want to delete {jobs.length} jobs and all related data (applications, scores, manual actions)? This action cannot be undone.
             </p>
             <div className="flex justify-end gap-2">

@@ -45,9 +45,9 @@ export function DashboardPage({ runs, jobs, manualActions, applications }: { run
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {stats.map((item) => (
           <Card key={item.label} variant="muted" className="p-4">
-            <p className="text-xs uppercase tracking-[0.12em] text-muted">{item.label}</p>
-            <p className="mt-2 font-display text-3xl text-text">{item.value}</p>
-            <p className="mt-1 text-xs text-muted">{item.helper}</p>
+            <p className="text-xs uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400">{item.label}</p>
+            <p className="mt-2 text-3xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">{item.value}</p>
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{item.helper}</p>
           </Card>
         ))}
       </div>
@@ -55,16 +55,16 @@ export function DashboardPage({ runs, jobs, manualActions, applications }: { run
       <div className="grid gap-4 xl:grid-cols-2">
         <Card className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="font-display text-xl text-text">Recent Pipelines</h2>
+            <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Recent Pipelines</h2>
             <Badge tone="info">{latestRuns.length} showing</Badge>
           </div>
           {latestRuns.length === 0 ? (
-            <p className="text-sm text-muted">No runs yet.</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">No runs yet.</p>
           ) : (
             <div className="space-y-2">
               {latestRuns.map((run) => (
-                <div key={run.id} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-xl border border-border bg-elevated/60 px-3 py-2 text-sm">
-                  <p className="truncate font-semibold text-text">Run {String(run.id).slice(0, 10)}</p>
+                <div key={run.id} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900/70">
+                  <p className="truncate font-semibold text-gray-900 dark:text-gray-100">Run {String(run.id).slice(0, 10)}</p>
                   <Badge
                     tone={
                       run.status === 'completed'
@@ -80,7 +80,7 @@ export function DashboardPage({ runs, jobs, manualActions, applications }: { run
                   >
                     {run.status}
                   </Badge>
-                  <p className="text-xs text-muted">{run.current_node || 'N/A'}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">{run.current_node || 'N/A'}</p>
                 </div>
               ))}
             </div>
@@ -89,19 +89,19 @@ export function DashboardPage({ runs, jobs, manualActions, applications }: { run
 
         <Card className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="font-display text-xl text-text">Manual Intervention Pressure</h2>
+            <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Manual Intervention Pressure</h2>
             <Badge tone={unresolvedActions.length > 0 ? 'warning' : 'success'}>
               {unresolvedActions.length > 0 ? 'Needs attention' : 'Healthy'}
             </Badge>
           </div>
           {unresolvedActions.length === 0 ? (
-            <p className="text-sm text-muted">No unresolved manual actions.</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">No unresolved manual actions.</p>
           ) : (
             <div className="space-y-2">
               {unresolvedActions.map((action) => (
-                <div key={action.id} className="rounded-xl border border-border bg-elevated/60 px-3 py-2">
-                  <p className="text-sm font-semibold text-text">{action.company || 'Unknown company'} - {action.title || 'Untitled action'}</p>
-                  <p className="mt-1 text-xs text-muted">
+                <div key={action.id} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/70">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{action.company || 'Unknown company'} - {action.title || 'Untitled action'}</p>
+                  <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
                     {action.action_type || 'manual_step'} - {action.status}
                   </p>
                 </div>

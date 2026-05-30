@@ -13,9 +13,9 @@ export function Card({
   variant?: 'panel' | 'row' | 'muted'
 }) {
   const variants = {
-    panel: 'rounded-2xl border border-border bg-surface shadow-card',
-    row: 'rounded-xl border border-border bg-elevated/70 shadow-card',
-    muted: 'rounded-xl border border-border bg-elevated/40',
+    panel: 'rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900',
+    row: 'rounded-xl border border-gray-200 bg-gray-50 shadow-sm dark:border-gray-800 dark:bg-gray-900/80',
+    muted: 'rounded-xl border border-gray-200 bg-gray-50/70 dark:border-gray-800 dark:bg-gray-900/40',
   }
 
   return (
@@ -43,12 +43,12 @@ export function Button({
   title?: string
 }) {
   const variants = {
-    primary: 'bg-accent text-white hover:brightness-110',
-    secondary: 'bg-elevated text-text border border-border hover:bg-surface',
-    ghost: 'bg-transparent text-text hover:bg-elevated',
-    icon: 'bg-transparent text-text hover:bg-elevated h-9 w-9 p-0',
-    danger: 'bg-danger text-white hover:brightness-110',
-    attention: 'bg-accent text-white ring-2 ring-accent/45 shadow-card hover:brightness-110',
+    primary: 'bg-blue-600 text-white hover:bg-blue-700',
+    secondary: 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800',
+    ghost: 'bg-transparent text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800',
+    icon: 'h-9 w-9 border border-transparent bg-transparent p-0 text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800',
+    danger: 'bg-red-600 text-white hover:bg-red-700',
+    attention: 'bg-gradient-to-r from-purple-600 to-pink-500 text-white shadow-sm hover:from-purple-500 hover:to-pink-500',
   }
 
   return (
@@ -58,7 +58,7 @@ export function Button({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-app disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-gray-950',
         variants[variant],
         className,
       )}
@@ -84,7 +84,7 @@ export function IconButton({
   return (
     <Button
       variant="icon"
-      className={cn('rounded-lg border border-transparent', className)}
+      className={cn('rounded-lg', className)}
       onClick={onClick}
       disabled={disabled}
       title={title}
@@ -105,11 +105,11 @@ export function Badge({
   tone?: 'default' | 'success' | 'warning' | 'danger' | 'info'
 }) {
   const tones = {
-    default: 'bg-elevated text-text border-border',
-    success: 'bg-success/20 text-success border-success/45',
-    warning: 'bg-warning/20 text-warning border-warning/45',
-    danger: 'bg-danger/20 text-danger border-danger/45',
-    info: 'bg-accent/20 text-accent border-accent/45',
+    default: 'border-gray-200 bg-gray-100 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200',
+    success: 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/50 dark:bg-green-900/20 dark:text-green-300',
+    warning: 'border-yellow-200 bg-yellow-50 text-yellow-700 dark:border-yellow-900/50 dark:bg-yellow-900/20 dark:text-yellow-300',
+    danger: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300',
+    info: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-300',
   }
 
   return <span className={cn('inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold', tones[tone], className)}>{children}</span>
@@ -120,7 +120,7 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
     <input
       {...props}
       className={cn(
-        'w-full rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-app',
+        'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-white dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-400 dark:focus:ring-offset-gray-950',
         props.className,
       )}
     />
@@ -132,7 +132,7 @@ export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
     <textarea
       {...props}
       className={cn(
-        'w-full rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-app',
+        'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-white dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-400 dark:focus:ring-offset-gray-950',
         props.className,
       )}
     />
@@ -153,8 +153,8 @@ export function PageHeader({
   return (
     <div className={cn('mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between', className)}>
       <div>
-        <h1 className="font-display text-2xl md:text-3xl text-text">{title}</h1>
-        {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
+        <h1 className="text-2xl font-semibold tracking-tight text-gray-900 md:text-3xl dark:text-gray-100">{title}</h1>
+        {subtitle ? <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{subtitle}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </div>
@@ -175,10 +175,10 @@ export function FilterChip({
       type="button"
       onClick={onClick}
       className={cn(
-        'rounded-full border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-app',
+        'rounded-full border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950',
         active
-          ? 'border-accent bg-accent/20 text-accent'
-          : 'border-border bg-elevated text-muted hover:bg-surface hover:text-text',
+          ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-300'
+          : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800',
       )}
     >
       {children}
@@ -198,15 +198,17 @@ export function SegmentedControl<T extends string>({
   className?: string
 }) {
   return (
-    <div className={cn('inline-flex rounded-xl border border-border bg-elevated p-1', className)}>
+    <div className={cn('inline-flex rounded-lg border border-gray-200 bg-gray-100 p-1 dark:border-gray-700 dark:bg-gray-800', className)}>
       {options.map((option) => (
         <button
           key={option.value}
           type="button"
           onClick={() => onChange(option.value)}
           className={cn(
-            'rounded-lg px-2.5 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-app',
-            option.value === value ? 'bg-surface text-text shadow-card' : 'text-muted hover:text-text',
+            'rounded-md px-2.5 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950',
+            option.value === value
+              ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-gray-100'
+              : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100',
           )}
         >
           {option.label}
@@ -217,5 +219,14 @@ export function SegmentedControl<T extends string>({
 }
 
 export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
-  return <kbd className={cn('rounded-md border border-border bg-elevated px-1.5 py-0.5 text-[11px] font-semibold text-muted', className)}>{children}</kbd>
+  return (
+    <kbd
+      className={cn(
+        'rounded border border-gray-200 bg-gray-100 px-1.5 py-0.5 text-[11px] font-semibold text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300',
+        className,
+      )}
+    >
+      {children}
+    </kbd>
+  )
 }

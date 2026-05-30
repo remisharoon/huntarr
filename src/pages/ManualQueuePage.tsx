@@ -47,7 +47,7 @@ export function ManualQueuePage({
       />
 
       <Card className="overflow-hidden p-0">
-        <div className="hidden grid-cols-[1.8fr_1.1fr_0.8fr_0.8fr_auto] gap-2 border-b border-border bg-elevated/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted md:grid">
+        <div className="hidden grid-cols-[1.8fr_1.1fr_0.8fr_0.8fr_auto] gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500 dark:border-gray-800 dark:bg-gray-900/70 dark:text-gray-400 md:grid">
           <span>Queue Item</span>
           <span>Action Type</span>
           <span>Status</span>
@@ -56,25 +56,25 @@ export function ManualQueuePage({
         </div>
 
         {filteredActions.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-muted">No manual actions in this filter.</div>
+          <div className="px-4 py-8 text-center text-sm text-gray-600 dark:text-gray-400">No manual actions in this filter.</div>
         ) : (
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-gray-200 dark:divide-gray-800">
             {filteredActions.map((action) => {
               const urgency = deriveUrgency(action)
 
               return (
                 <div key={action.id} className="grid grid-cols-1 gap-3 px-4 py-3 md:grid-cols-[1.8fr_1.1fr_0.8fr_0.8fr_auto] md:items-center">
                   <div>
-                    <p className="font-semibold text-text">{action.company || 'Unknown company'} - {action.title || 'Untitled item'}</p>
-                    <p className="mt-1 text-xs text-muted">{new Date(action.created_at).toLocaleString()}</p>
+                    <p className="font-semibold text-gray-900 dark:text-gray-100">{action.company || 'Unknown company'} - {action.title || 'Untitled item'}</p>
+                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{new Date(action.created_at).toLocaleString()}</p>
                     {action.session_url ? (
-                      <a className="mt-1 inline-block text-xs text-accent hover:underline" href={action.session_url} target="_blank" rel="noreferrer">
+                      <a className="mt-1 inline-block text-xs text-blue-600 hover:underline dark:text-blue-400" href={action.session_url} target="_blank" rel="noreferrer">
                         Open browser session
                       </a>
                     ) : null}
                   </div>
 
-                  <p className="text-sm text-muted">{action.action_type || 'manual_step'}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{action.action_type || 'manual_step'}</p>
 
                   <div>
                     <Badge tone={action.status === 'resolved' ? 'success' : action.status === 'pending' ? 'warning' : 'default'}>

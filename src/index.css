@@ -3,61 +3,31 @@
 @tailwind utilities;
 
 :root {
-  --bg-app: #081226;
-  --bg-surface: #0f1b33;
-  --bg-elevated: #132342;
-  --text-primary: #e6edf9;
-  --text-muted: #9aa7c0;
-  --border-subtle: #253559;
-  --shell-border-strong: #3b5d91;
-  --shell-inset-x: 20px;
-  --shell-inset-y: 18px;
-  --shell-gap: 14px;
-  --shell-radius: 20px;
-  --accent: #51a4ff;
-  --success: #7ee2a8;
-  --warning: #f7c869;
-  --danger: #ff7f96;
-  --ring-focus: #86b9ff;
-  --shadow-card: 0 12px 24px -18px rgba(0, 0, 0, 0.65);
-  --shadow-panel: 0 22px 55px -28px rgba(0, 0, 0, 0.78);
-  color-scheme: dark;
-}
-
-html.theme-dark {
-  --bg-app: #081226;
-  --bg-surface: #0f1b33;
-  --bg-elevated: #132342;
-  --text-primary: #e6edf9;
-  --text-muted: #9aa7c0;
-  --border-subtle: #253559;
-  --shell-border-strong: #3b5d91;
-  --accent: #51a4ff;
-  --success: #7ee2a8;
-  --warning: #f7c869;
-  --danger: #ff7f96;
-  --ring-focus: #86b9ff;
-  --shadow-card: 0 12px 24px -18px rgba(0, 0, 0, 0.65);
-  --shadow-panel: 0 22px 55px -28px rgba(0, 0, 0, 0.78);
-  color-scheme: dark;
-}
-
-html.theme-light {
-  --bg-app: #f4f8ff;
-  --bg-surface: #ffffff;
-  --bg-elevated: #f8fbff;
-  --text-primary: #172338;
-  --text-muted: #5e6c84;
-  --border-subtle: #d6dfea;
-  --shell-border-strong: #8ea8cd;
-  --accent: #156ff0;
-  --success: #1f9d59;
-  --warning: #be7b00;
-  --danger: #c73857;
-  --ring-focus: #377df7;
-  --shadow-card: 0 14px 24px -20px rgba(19, 35, 62, 0.22);
-  --shadow-panel: 0 26px 55px -40px rgba(19, 35, 62, 0.34);
+  --color-background: 210 40% 98%;
+  --color-surface: 0 0% 100%;
+  --color-elevated: 210 40% 96.1%;
+  --color-foreground: 222.2 84% 4.9%;
+  --color-primary: 221.2 83.2% 53.3%;
+  --color-muted-foreground: 215.4 16.3% 46.9%;
+  --color-border: 214.3 31.8% 91.4%;
+  --color-success: 142.1 76.2% 36.3%;
+  --color-warning: 37.7 92.1% 50.2%;
+  --color-danger: 0 84.2% 60.2%;
   color-scheme: light;
+}
+
+html.dark {
+  --color-background: 222.2 84% 4.9%;
+  --color-surface: 222.2 47.4% 11.2%;
+  --color-elevated: 217.2 32.6% 17.5%;
+  --color-foreground: 210 40% 98%;
+  --color-primary: 217.2 91.2% 59.8%;
+  --color-muted-foreground: 215 20.2% 65.1%;
+  --color-border: 217.2 32.6% 17.5%;
+  --color-success: 142.1 70.6% 45.3%;
+  --color-warning: 47.9 95.8% 53.1%;
+  --color-danger: 0 72.2% 50.6%;
+  color-scheme: dark;
 }
 
 * {
@@ -72,92 +42,35 @@ body,
 
 body {
   margin: 0;
-  font-family: 'IBM Plex Sans', sans-serif;
-  color: var(--text-primary);
+  font-family: ui-sans-serif, system-ui, sans-serif;
   background:
-    radial-gradient(circle at 15% 10%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 35%),
-    radial-gradient(circle at 85% 5%, color-mix(in srgb, var(--success) 10%, transparent), transparent 30%),
-    var(--bg-app);
+    radial-gradient(circle at 6% 6%, rgb(59 130 246 / 0.1), transparent 34%),
+    radial-gradient(circle at 88% 0%, rgb(168 85 247 / 0.11), transparent 32%),
+    hsl(var(--color-background));
+  color: hsl(var(--color-foreground));
 }
 
-.app-frame {
-  min-height: 100vh;
-  padding: var(--shell-inset-y) var(--shell-inset-x);
-}
-
-.app-shell {
-  min-height: calc(100vh - (var(--shell-inset-y) * 2));
-  display: flex;
-  gap: var(--shell-gap);
-  border: 2px solid var(--shell-border-strong);
-  border-radius: var(--shell-radius);
-  padding: var(--shell-gap);
+html.dark body {
   background:
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--bg-surface) 58%, transparent),
-      color-mix(in srgb, var(--bg-app) 72%, transparent)
-    );
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--shell-border-strong) 35%, transparent),
-    var(--shadow-panel);
+    radial-gradient(circle at 6% 6%, rgb(59 130 246 / 0.13), transparent 38%),
+    radial-gradient(circle at 88% 0%, rgb(168 85 247 / 0.14), transparent 36%),
+    hsl(var(--color-background));
 }
 
-.app-rail {
-  border: 1px solid color-mix(in srgb, var(--shell-border-strong) 72%, var(--border-subtle));
-  border-radius: calc(var(--shell-radius) - 6px);
-  background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
-  overflow: hidden;
+.motion-enter {
+  animation: fade-up 240ms ease-out;
 }
 
-.app-content-surface {
-  min-width: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid color-mix(in srgb, var(--shell-border-strong) 68%, var(--border-subtle));
-  border-radius: calc(var(--shell-radius) - 6px);
-  background: color-mix(in srgb, var(--bg-surface) 95%, transparent);
-  overflow: hidden;
-}
-
-@media (max-width: 768px) {
-  :root {
-    --shell-inset-x: 9px;
-    --shell-inset-y: 9px;
-    --shell-gap: 9px;
-    --shell-radius: 16px;
-  }
-}
-
-@keyframes shell-slide {
+@keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-@keyframes sidebar-slide {
-  from {
-    opacity: 0;
-    transform: translateX(-14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.motion-enter {
-  animation: shell-slide 200ms ease-out;
-}
-
-.motion-sidebar {
-  animation: sidebar-slide 220ms ease-out;
 }
 
 .resume-upload-cta {
@@ -169,8 +82,8 @@ body {
   content: '';
   position: absolute;
   inset: -1px;
-  border-radius: 1rem;
-  border: 1px solid color-mix(in srgb, var(--accent) 44%, transparent);
+  border-radius: 0.9rem;
+  border: 1px solid rgb(59 130 246 / 0.45);
   opacity: 0;
   animation: resume-cta-ring 2.6s ease-out infinite;
   pointer-events: none;
@@ -185,9 +98,11 @@ body {
     opacity: 0;
     transform: scale(0.98);
   }
+
   25% {
     opacity: 0.9;
   }
+
   100% {
     opacity: 0;
     transform: scale(1.02);
@@ -197,10 +112,11 @@ body {
 @keyframes resume-button-glow {
   0%,
   100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 34%, transparent);
+    box-shadow: 0 0 0 0 rgb(59 130 246 / 0.24);
   }
+
   50% {
-    box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 0%, transparent);
+    box-shadow: 0 0 0 10px rgb(59 130 246 / 0);
   }
 }
 
