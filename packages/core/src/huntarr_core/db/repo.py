@@ -30,6 +30,7 @@ _JSON_COLUMNS = {
     "rule_config",
     "search_config",
     "skills",
+    "sources",
     "state_json",
     "value",
     "experience",
@@ -318,44 +319,50 @@ class HuntRepo:
                 """
                 UPDATE profiles
                    SET full_name = $2,
-                       email = $3,
-                       phone = $4,
-                       location = $5,
-                       years_experience = $6,
-                       summary = $7,
-                       skills = $8::jsonb,
-                       experience = $9::jsonb,
-                       education = $10::jsonb,
-                       awards = $11::jsonb,
-                       certifications = $12::jsonb,
-                       projects = $13::jsonb,
-                       languages = $14::jsonb,
-                       links = $15::jsonb,
-                       profile_photo_path = $16,
-                       profile_photo_mime = $17,
+                      email = $3,
+                      phone = $4,
+                      location = $5,
+                      years_experience = $6,
+                      summary = $7,
+                      skills = $8::jsonb,
+                      experience = $9::jsonb,
+                      education = $10::jsonb,
+                      awards = $11::jsonb,
+                      certifications = $12::jsonb,
+                      projects = $13::jsonb,
+                      languages = $14::jsonb,
+                      links = $15::jsonb,
+                      profile_photo_path = $16,
+                      profile_photo_mime = $17,
                        preferences = $18::jsonb,
+                       desired_job_title = $19,
+                       desired_location = $20,
+                       resume_path = $21,
                        updated_at = NOW()
-                 WHERE id = $1
-             RETURNING *
-                """,
-                UUID(str(profile_id)),
-                payload.get("full_name", ""),
-                payload.get("email", ""),
-                payload.get("phone"),
-                payload.get("location"),
-                payload.get("years_experience", 0),
-                payload.get("summary", ""),
-                _json_dumps(payload.get("skills", [])),
-                _json_dumps(payload.get("experience", [])),
-                _json_dumps(payload.get("education", [])),
-                _json_dumps(payload.get("awards", [])),
-                _json_dumps(payload.get("certifications", [])),
-                _json_dumps(payload.get("projects", [])),
-                _json_dumps(payload.get("languages", [])),
-                _json_dumps(payload.get("links", [])),
-                payload.get("profile_photo_path"),
-                payload.get("profile_photo_mime"),
-                _json_dumps(payload.get("preferences", {})),
+                  WHERE id = $1
+              RETURNING *
+                 """,
+                 UUID(str(profile_id)),
+                 payload.get("full_name", ""),
+                 payload.get("email", ""),
+                 payload.get("phone"),
+                 payload.get("location"),
+                 payload.get("years_experience", 0),
+                 payload.get("summary", ""),
+                 _json_dumps(payload.get("skills", [])),
+                 _json_dumps(payload.get("experience", [])),
+                 _json_dumps(payload.get("education", [])),
+                 _json_dumps(payload.get("awards", [])),
+                 _json_dumps(payload.get("certifications", [])),
+                 _json_dumps(payload.get("projects", [])),
+                 _json_dumps(payload.get("languages", [])),
+                 _json_dumps(payload.get("links", [])),
+                 payload.get("profile_photo_path"),
+                 payload.get("profile_photo_mime"),
+                 _json_dumps(payload.get("preferences", {})),
+                 payload.get("desired_job_title"),
+                 payload.get("desired_location"),
+                 payload.get("resume_path"),
             )
             if row:
                 return _normalize_row(row)
@@ -379,8 +386,11 @@ class HuntRepo:
                 links,
                 profile_photo_path,
                 profile_photo_mime,
-                preferences
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$14::jsonb,$15::jsonb,$16,$17,$18::jsonb)
+                preferences,
+                desired_job_title,
+                desired_location,
+                resume_path
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$14::jsonb,$15,$16,$17::jsonb,$18,$19,$20,$21)
             RETURNING *
             """,
             payload.get("full_name", ""),
@@ -400,6 +410,9 @@ class HuntRepo:
             payload.get("profile_photo_path"),
             payload.get("profile_photo_mime"),
             _json_dumps(payload.get("preferences", {})),
+            payload.get("desired_job_title"),
+            payload.get("desired_location"),
+            payload.get("resume_path"),
         )
         return _normalize_row(row) if row else {}
 
@@ -414,21 +427,40 @@ class HuntRepo:
         profile_id: UUID,
         rule_config: dict[str, Any],
         natural_language_override: str | None,
+        sources: list[str] | None = None,
     ) -> None:
-        await self.pool.execute(
-            """
-            INSERT INTO search_preferences(profile_id, rule_config, natural_language_override)
-            VALUES ($1, $2::jsonb, $3)
-            ON CONFLICT(profile_id)
-            DO UPDATE SET
-                rule_config = EXCLUDED.rule_config,
-                natural_language_override = EXCLUDED.natural_language_override,
-                updated_at = NOW()
-            """,
-            profile_id,
-            _json_dumps(rule_config),
-            natural_language_override,
-        )
+        if sources is not None:
+            await self.pool.execute(
+                """
+                INSERT INTO search_preferences(profile_id, rule_config, natural_language_override, sources)
+                VALUES ($1, $2::jsonb, $3, $4::jsonb)
+                ON CONFLICT(profile_id)
+                DO UPDATE SET
+                    rule_config = EXCLUDED.rule_config,
+                    natural_language_override = EXCLUDED.natural_language_override,
+                    sources = EXCLUDED.sources,
+                    updated_at = NOW()
+                """,
+                profile_id,
+                _json_dumps(rule_config),
+                natural_language_override,
+                _json_dumps(sources),
+            )
+        else:
+            await self.pool.execute(
+                """
+                INSERT INTO search_preferences(profile_id, rule_config, natural_language_override)
+                VALUES ($1, $2::jsonb, $3)
+                ON CONFLICT(profile_id)
+                DO UPDATE SET
+                    rule_config = EXCLUDED.rule_config,
+                    natural_language_override = EXCLUDED.natural_language_override,
+                    updated_at = NOW()
+                """,
+                profile_id,
+                _json_dumps(rule_config),
+                natural_language_override,
+            )
 
     async def get_search_preferences(self, profile_id: UUID) -> dict[str, Any] | None:
         row = await self.pool.fetchrow(
@@ -570,23 +602,82 @@ class HuntRepo:
                     )
         return persisted
 
-    async def list_jobs(self, limit: int = 200) -> list[dict[str, Any]]:
+    async def list_jobs(self, limit: int = 200) -> dict[str, Any]:
         rows = await self.pool.fetch(
             """
             WITH best_scores AS (
                 SELECT DISTINCT ON (job_id) job_id, score, explanation
                   FROM job_scores
                  ORDER BY job_id, score DESC
+            ),
+            job_status AS (
+                SELECT 
+                    j.id as job_id,
+                    CASE
+                        WHEN EXISTS (
+                            SELECT 1 FROM applications a 
+                            WHERE a.job_id = j.id AND a.status = 'submitted'
+                        ) THEN 'applied'
+                        WHEN EXISTS (
+                            SELECT 1 FROM applications a 
+                            WHERE a.job_id = j.id AND a.status IN ('queued', 'in_progress')
+                        ) THEN 'queued'
+                        ELSE 'new'
+                    END as status
+                FROM job_postings j
             )
-            SELECT j.*, s.score, s.explanation
+            SELECT j.*, s.score, s.explanation, js.status
               FROM job_postings j
               LEFT JOIN best_scores s ON s.job_id = j.id
+              LEFT JOIN job_status js ON js.job_id = j.id
              ORDER BY COALESCE(s.score, 0) DESC, j.updated_at DESC
              LIMIT $1
             """,
             limit,
         )
-        return [_normalize_row(row) for row in rows]
+        
+        counts = await self.pool.fetchrow(
+            """
+            WITH job_status AS (
+                SELECT 
+                    j.id as job_id,
+                    CASE
+                        WHEN EXISTS (
+                            SELECT 1 FROM applications a 
+                            WHERE a.job_id = j.id AND a.status = 'submitted'
+                        ) THEN 'applied'
+                        WHEN EXISTS (
+                            SELECT 1 FROM applications a 
+                            WHERE a.job_id = j.id AND a.status IN ('queued', 'in_progress')
+                        ) THEN 'queued'
+                        ELSE 'new'
+                    END as status
+                FROM job_postings j
+            )
+            SELECT 
+                COUNT(*) as total,
+                COALESCE(COUNT(*) FILTER (WHERE status = 'new'), 0) as new,
+                COALESCE(COUNT(*) FILTER (WHERE status = 'queued'), 0) as queued,
+                COALESCE(COUNT(*) FILTER (WHERE status = 'applied'), 0) as applied
+            FROM job_status
+            """
+        )
+        
+        return {
+            'items': [_normalize_row(row) for row in rows],
+            'counts': {
+                'total': counts['total'],
+                'new': counts['new'],
+                'queued': counts['queued'],
+                'applied': counts['applied'],
+            }
+        }
+
+    async def delete_all_jobs(self) -> int:
+        result = await self.pool.execute(
+            "DELETE FROM job_postings"
+        )
+        return int(result.split()[-1])
 
     async def get_job(self, job_id: UUID) -> dict[str, Any] | None:
         row = await self.pool.fetchrow(

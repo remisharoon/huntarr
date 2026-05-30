@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Sparkles, Trash2, UploadCloud } from 'lucide-react'
+import { FileText, Plus, Sparkles, Trash2, UploadCloud } from 'lucide-react'
 
-import { Badge, Button, Card, Input, PageHeader, TextArea } from '../components/ui'
+import { Badge, Button, Card, IconButton, Input, PageHeader, TextArea } from '../components/ui'
 import { api } from '../lib/api'
 import type {
   Profile,
@@ -38,9 +38,12 @@ const DEFAULT_PROFILE: Profile = {
   links: [],
   profile_photo_path: null,
   profile_photo_mime: null,
+  resume_path: null,
   preferences: {},
   rule_config: {},
   natural_language_override: null,
+  desired_job_title: null,
+  desired_location: null,
 }
 
 const EMPTY_EXPERIENCE: ProfileExperience = { title: '', company: '', start: '', end: '', description: '' }
@@ -145,9 +148,12 @@ function normalizeProfile(input: Profile | Partial<Profile> | null | undefined):
     })),
     profile_photo_path: source.profile_photo_path ? asString(source.profile_photo_path) : null,
     profile_photo_mime: source.profile_photo_mime ? asString(source.profile_photo_mime) : null,
+    resume_path: source.resume_path ? asString(source.resume_path) : null,
     preferences: (source.preferences ?? {}) as Record<string, unknown>,
     rule_config: (source.rule_config ?? {}) as Record<string, unknown>,
     natural_language_override: source.natural_language_override ? asString(source.natural_language_override) : null,
+    desired_job_title: asString(source.desired_job_title) || null,
+    desired_location: asString(source.desired_location) || null,
   }
 }
 
@@ -287,6 +293,70 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
             </div>
           </div>
         ) : null}
+
+        {/* Resume Upload Section - Optional */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Resume (Optional)</label>
+          <div className="flex items-center gap-4">
+            {form.resume_path ? (
+              <div className="flex items-center gap-3 flex-1">
+                <FileText className="w-8 h-8 text-primary" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {form.resume_path.split('/').pop() || 'resume.pdf'}
+                  </p>
+                  <p className="text-xs text-muted">Uploaded resume will be used for applications</p>
+                </div>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    if (!form.resume_path) return
+                    window.open(form.resume_path, '_blank')
+                  }}
+                >
+                  Preview
+                </Button>
+                <IconButton
+                  title="Remove resume"
+                  onClick={() => {
+                    setForm((prev) => ({ ...prev, resume_path: null }))
+                  }}
+                >
+                  <Trash2 size={16} />
+                </IconButton>
+              </div>
+            ) : (
+              <div className="flex-1">
+                <Input
+                  type="file"
+                  accept=".pdf"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    try {
+                      const resumeUploadBase = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
+                      const formData = new FormData()
+                      formData.append('file', file)
+                      const response = await fetch(`${resumeUploadBase}/api/profile/resume-upload`, {
+                        method: 'POST',
+                        body: formData,
+                      })
+                      if (!response.ok) throw new Error('Upload failed')
+                      const data = (await response.json()) as { path?: string }
+                      setForm((prev) => ({ ...prev, resume_path: data.path ?? null }))
+                    } catch (error) {
+                      console.error('Failed to upload resume:', error)
+                    }
+                  }}
+                  placeholder="Upload resume PDF (optional)"
+                />
+                <p className="text-xs text-muted mt-1">
+                  Upload a resume PDF to use for job applications (overrides generated resume)
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       </Card>
 
       <Card className="space-y-4">
@@ -319,6 +389,33 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
             value={String(form.years_experience ?? 0)}
             onChange={(event) => setForm((prev) => ({ ...prev, years_experience: asInt(event.target.value) }))}
           />
+        </div>
+      </Card>
+
+      <Card className="space-y-4">
+        <h2 className="font-display text-xl text-text">Job Preferences</h2>
+        <p className="text-sm text-muted">Used for job discovery when starting hunts. Override defaults from resume if needed.</p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <div>
+            <label className="text-sm font-semibold text-text">Desired Job Title</label>
+            <Input
+              placeholder="e.g. Software Engineer, Backend Developer"
+              value={form.desired_job_title ?? ''}
+              onChange={(event) => setForm((prev) => ({ ...prev, desired_job_title: event.target.value }))}
+              className="mt-1"
+            />
+            <p className="mt-1 text-xs text-muted">Defaults from most recent job title in resume</p>
+          </div>
+          <div>
+            <label className="text-sm font-semibold text-text">Desired Location</label>
+            <Input
+              placeholder="e.g. Remote, San Francisco, New York"
+              value={form.desired_location ?? ''}
+              onChange={(event) => setForm((prev) => ({ ...prev, desired_location: event.target.value }))}
+              className="mt-1"
+            />
+            <p className="mt-1 text-xs text-muted">Defaults from resume location</p>
+          </div>
         </div>
       </Card>
 

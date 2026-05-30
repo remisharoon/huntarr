@@ -16,6 +16,7 @@ import {
   Workflow,
   X,
 } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import { Badge, Button, Card, IconButton, Kbd } from './components/ui'
 import { api } from './lib/api'
@@ -31,6 +32,62 @@ import { SettingsPage } from './pages/SettingsPage'
 import type { Profile, ThemeMode } from './types'
 
 type View = 'dashboard' | 'jobs' | 'manual' | 'profile' | 'runs' | 'settings' | 'job-detail' | 'application-detail' | 'run-detail'
+
+function routePathForView(view: Extract<View, 'dashboard' | 'jobs' | 'manual' | 'profile' | 'runs' | 'settings'>): string {
+  switch (view) {
+    case 'dashboard':
+      return '/'
+    case 'jobs':
+      return '/jobs'
+    case 'manual':
+      return '/manual'
+    case 'profile':
+      return '/profile'
+    case 'runs':
+      return '/runs'
+    case 'settings':
+      return '/settings'
+  }
+}
+
+function resolveRoute(pathname: string): {
+  view: View
+  selectedJobId: string | null
+  selectedApplicationId: string | null
+  selectedRunId: string | null
+} {
+  if (pathname === '/' || pathname === '') {
+    return { view: 'dashboard', selectedJobId: null, selectedApplicationId: null, selectedRunId: null }
+  }
+  if (pathname === '/jobs') {
+    return { view: 'jobs', selectedJobId: null, selectedApplicationId: null, selectedRunId: null }
+  }
+  if (pathname.startsWith('/jobs/')) {
+    const id = pathname.slice('/jobs/'.length)
+    return { view: 'job-detail', selectedJobId: id || null, selectedApplicationId: null, selectedRunId: null }
+  }
+  if (pathname === '/manual') {
+    return { view: 'manual', selectedJobId: null, selectedApplicationId: null, selectedRunId: null }
+  }
+  if (pathname === '/profile') {
+    return { view: 'profile', selectedJobId: null, selectedApplicationId: null, selectedRunId: null }
+  }
+  if (pathname === '/runs') {
+    return { view: 'runs', selectedJobId: null, selectedApplicationId: null, selectedRunId: null }
+  }
+  if (pathname.startsWith('/runs/')) {
+    const id = pathname.slice('/runs/'.length)
+    return { view: 'run-detail', selectedJobId: null, selectedApplicationId: null, selectedRunId: id || null }
+  }
+  if (pathname === '/settings') {
+    return { view: 'settings', selectedJobId: null, selectedApplicationId: null, selectedRunId: null }
+  }
+  if (pathname.startsWith('/applications/')) {
+    const id = pathname.slice('/applications/'.length)
+    return { view: 'application-detail', selectedJobId: null, selectedApplicationId: id || null, selectedRunId: null }
+  }
+  return { view: 'dashboard', selectedJobId: null, selectedApplicationId: null, selectedRunId: null }
+}
 
 const navItems: Array<{ id: Extract<View, 'dashboard' | 'jobs' | 'manual' | 'profile' | 'runs' | 'settings'>; label: string; icon: any }> = [
   { id: 'dashboard', label: 'Overview', icon: Workflow },
@@ -60,17 +117,18 @@ function getStoredTheme(): ThemeMode {
 }
 
 export default function App() {
-  const [view, setView] = useState<View>('dashboard')
+  const location = useLocation()
+  const navigate = useNavigate()
+  const routeState = useMemo(() => resolveRoute(location.pathname), [location.pathname])
+  const view = routeState.view
   const [runs, setRuns] = useState<any[]>([])
   const [jobs, setJobs] = useState<any[]>([])
+  const [jobsCounts, setJobsCounts] = useState({ total: 0, new: 0, queued: 0, applied: 0 })
   const [applications, setApplications] = useState<any[]>([])
   const [manualActions, setManualActions] = useState<any[]>([])
   const [profile, setProfile] = useState<Profile | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
-  const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null)
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [themeMode, setThemeMode] = useState<ThemeMode>(getStoredTheme)
@@ -93,7 +151,8 @@ export default function App() {
         api.getProfile(),
       ])
       setRuns(runsRes.items)
-      setJobs(jobsRes.items)
+      setJobs(jobsRes.items || [])
+      setJobsCounts(jobsRes.counts || { total: 0, new: 0, queued: 0, applied: 0 })
       setApplications(appRes.items)
       setManualActions(manualRes.items)
       setProfile(profileRes)
@@ -130,6 +189,10 @@ export default function App() {
   }, [resolvedTheme, themeMode])
 
   useEffect(() => {
+    setMobileNavOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
       const isTypingTarget =
@@ -156,15 +219,15 @@ export default function App() {
         }
 
         if (key === 'r') {
-          setView('runs')
+          navigate('/runs')
           return
         }
         if (key === 'j') {
-          setView('jobs')
+          navigate('/jobs')
           return
         }
         if (key === 'd') {
-          setView('dashboard')
+          navigate('/')
           return
         }
       }
@@ -185,7 +248,7 @@ export default function App() {
 
       if (key === '/') {
         event.preventDefault()
-        setView('runs')
+        navigate('/runs')
         window.setTimeout(() => window.dispatchEvent(new Event('huntarr:focus-runs-search')), 0)
       }
 
@@ -199,16 +262,36 @@ export default function App() {
       window.removeEventListener('keydown', onKeyDown)
       if (goPrefixTimer.current) window.clearTimeout(goPrefixTimer.current)
     }
-  }, [view])
+  }, [navigate, view])
 
   const latestRunId = useMemo(() => (runs[0]?.id ? String(runs[0].id) : null), [runs])
 
   const startHunt = async () => {
     setBusy(true)
     try {
-      await api.createRun({ mode: 'manual', search_config: {} })
+      const search_config: Record<string, unknown> = {}
+
+      if (profile?.desired_job_title) {
+        search_config.role_keywords = [profile.desired_job_title]
+      }
+
+      if (profile?.desired_location) {
+        search_config.locations = [profile.desired_location]
+      }
+
+      if (profile?.job_sources) {
+        const enabledSources = Object.entries(profile.job_sources)
+          .filter(([_, enabled]) => enabled)
+          .map(([source]) => source)
+
+        if (enabledSources.length > 0) {
+          search_config.sources = enabledSources
+        }
+      }
+
+      await api.createRun({ mode: 'manual', search_config })
       await refresh()
-      setView('runs')
+      navigate('/runs')
     } finally {
       setBusy(false)
     }
@@ -217,6 +300,15 @@ export default function App() {
   const onApplyNow = async (jobId: string) => {
     await api.applyNow(jobId)
     await refresh()
+  }
+
+  const onDeleteAll = async () => {
+    try {
+      await api.deleteJobs()
+      await refresh()
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to delete jobs')
+    }
   }
 
   const onStartManual = async (id: string) => {
@@ -240,30 +332,23 @@ export default function App() {
   }
 
   const onViewJob = (jobId: string) => {
-    setSelectedJobId(jobId)
-    setView('job-detail')
+    navigate(`/jobs/${jobId}`)
   }
 
   const onViewApplication = (applicationId: string) => {
-    setSelectedApplicationId(applicationId)
-    setView('application-detail')
+    navigate(`/applications/${applicationId}`)
   }
 
   const onBack = () => {
-    setSelectedJobId(null)
-    setSelectedApplicationId(null)
-    setSelectedRunId(null)
-    setView('jobs')
+    navigate('/jobs')
   }
 
   const onBackToRuns = () => {
-    setSelectedRunId(null)
-    setView('runs')
+    navigate('/runs')
   }
 
   const onSelectRun = (runId: string) => {
-    setSelectedRunId(runId)
-    setView('run-detail')
+    navigate(`/runs/${runId}`)
   }
 
   const navView: View = view === 'job-detail' || view === 'application-detail' ? 'jobs' : view === 'run-detail' ? 'runs' : view
@@ -271,7 +356,7 @@ export default function App() {
   const titleMeta = titleByView[view]
 
   const openRunsSearch = () => {
-    setView('runs')
+    navigate('/runs')
     window.setTimeout(() => window.dispatchEvent(new Event('huntarr:focus-runs-search')), 0)
   }
 
@@ -290,7 +375,7 @@ export default function App() {
               key={item.id}
               type="button"
               onClick={() => {
-                setView(item.id)
+                navigate(routePathForView(item.id))
                 if (mobile) setMobileNavOpen(false)
               }}
               className={[
@@ -417,7 +502,7 @@ export default function App() {
               {error ? <Card className="mb-4 border-danger text-danger" variant="muted">{error}</Card> : null}
 
               {view === 'dashboard' ? <DashboardPage runs={runs} jobs={jobs} manualActions={manualActions} applications={applications} /> : null}
-              {view === 'jobs' ? <JobsPage jobs={jobs} onApplyNow={onApplyNow} onViewJob={onViewJob} /> : null}
+              {view === 'jobs' ? <JobsPage jobs={jobs} counts={jobsCounts} onApplyNow={onApplyNow} onViewJob={onViewJob} onDeleteAll={onDeleteAll} /> : null}
               {view === 'manual' ? <ManualQueuePage actions={manualActions} onStart={onStartManual} onResolve={onResolveManual} /> : null}
               {view === 'profile' ? (
                 <ProfilePage
@@ -440,13 +525,13 @@ export default function App() {
                 />
               ) : null}
               {view === 'settings' ? <SettingsPage /> : null}
-              {view === 'job-detail' && selectedJobId ? (
-                <JobDetailPage jobId={selectedJobId} onBack={onBack} onViewApplication={onViewApplication} />
+              {view === 'job-detail' && routeState.selectedJobId ? (
+                <JobDetailPage jobId={routeState.selectedJobId} onBack={onBack} onViewApplication={onViewApplication} />
               ) : null}
-              {view === 'application-detail' && selectedApplicationId ? (
-                <ApplicationDetailPage applicationId={selectedApplicationId} onBack={onBack} />
+              {view === 'application-detail' && routeState.selectedApplicationId ? (
+                <ApplicationDetailPage applicationId={routeState.selectedApplicationId} onBack={onBack} />
               ) : null}
-              {view === 'run-detail' && selectedRunId ? <RunDetailPage runId={selectedRunId} onBack={onBackToRuns} /> : null}
+              {view === 'run-detail' && routeState.selectedRunId ? <RunDetailPage runId={routeState.selectedRunId} onBack={onBackToRuns} /> : null}
             </div>
           </main>
         </div>

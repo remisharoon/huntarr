@@ -545,6 +545,9 @@ async def parse_resume_with_llm(raw_text: str, llm_runtime: dict[str, Any] | Non
 
 def normalize_profile_payload(parsed: dict[str, Any] | None, raw_text: str) -> dict[str, Any]:
     payload = parsed or {}
+
+    experience = _normalize_experience(payload.get('experience'))
+
     normalized = {
         'full_name': _clean_text(payload.get('full_name')),
         'email': _clean_text(payload.get('email')),
@@ -553,7 +556,7 @@ def normalize_profile_payload(parsed: dict[str, Any] | None, raw_text: str) -> d
         'years_experience': _coerce_int(payload.get('years_experience')),
         'summary': _clean_text(payload.get('summary')),
         'skills': _normalize_skills(payload.get('skills')),
-        'experience': _normalize_experience(payload.get('experience')),
+        'experience': experience,
         'education': _normalize_education(payload.get('education')),
         'awards': _normalize_awards(payload.get('awards')),
         'certifications': _normalize_certifications(payload.get('certifications')),
@@ -562,7 +565,14 @@ def normalize_profile_payload(parsed: dict[str, Any] | None, raw_text: str) -> d
         'links': _normalize_links(payload.get('links')),
         'profile_photo_path': _clean_text(payload.get('profile_photo_path')) or None,
         'profile_photo_mime': _clean_text(payload.get('profile_photo_mime')) or None,
+        'desired_job_title': None,
+        'desired_location': _clean_text(payload.get('location')),
     }
+
+    if experience:
+        most_recent_job = experience[0] if experience else None
+        if most_recent_job and most_recent_job.get('title'):
+            normalized['desired_job_title'] = _clean_text(most_recent_job['title'])
 
     if not normalized['email']:
         email_match = EMAIL_RE.search(raw_text)
@@ -838,8 +848,8 @@ async def run_events_batch(
 
 @app.get('/api/jobs')
 async def list_jobs(limit: int = Query(default=200, ge=1, le=500)) -> dict[str, Any]:
-    jobs = await get_repo().list_jobs(limit=limit)
-    return {'items': jobs}
+    result = await get_repo().list_jobs(limit=limit)
+    return result
 
 
 @app.get('/api/jobs/{job_id}', response_model=JobDetailResponse)
@@ -867,6 +877,12 @@ async def apply_now(job_id: UUID) -> dict[str, Any]:
     await repository.save_run_state(run['id'], state)
     await repository.enqueue_job(payload={'type': 'run_hunt', 'run_id': str(run['id'])}, run_id=run['id'])
     return {'run_id': run['id'], 'queued_job_id': job_id}
+
+
+@app.delete('/api/jobs')
+async def delete_all_jobs() -> dict[str, Any]:
+    deleted_count = await get_repo().delete_all_jobs()
+    return {'deleted_count': deleted_count}
 
 
 @app.get('/api/applications')
@@ -935,17 +951,38 @@ async def get_profile() -> dict[str, Any]:
     prefs = await get_repo().get_search_preferences(profile['id'])
     profile['rule_config'] = prefs.get('rule_config', {}) if prefs else {}
     profile['natural_language_override'] = prefs.get('natural_language_override') if prefs else None
+    
+    # Convert sources list to object with boolean values for frontend checkboxes
+    sources_list = prefs.get('sources', ["remoteok", "weworkremotely", "brave_search"]) if prefs else ["remoteok", "weworkremotely", "brave_search"]
+    job_sources_obj = {
+        "remoteok": "remoteok" in sources_list,
+        "weworkremotely": "weworkremotely" in sources_list,
+        "brave_search": "brave_search" in sources_list,
+    }
+    profile['job_sources'] = job_sources_obj
+    
     return profile
 
 
 @app.put('/api/profile')
 async def upsert_profile(payload: ProfilePayload) -> dict[str, Any]:
     repository = get_repo()
-    profile = await repository.upsert_profile(payload.model_dump())
+
+    profile_dict = payload.model_dump()
+    job_sources = profile_dict.get('job_sources')
+    sources_to_store = None
+    if job_sources:
+        sources_to_store = [
+            source for source, enabled in job_sources.items() if enabled
+        ]
+
+    profile = await repository.upsert_profile(profile_dict)
+
     await repository.upsert_search_preferences(
         UUID(str(profile['id'])),
         payload.rule_config,
         payload.natural_language_override,
+        sources=sources_to_store,
     )
     return profile
 
@@ -1010,6 +1047,7 @@ async def import_resume(file: UploadFile = File(...)) -> dict[str, Any]:
     normalized['profile_photo_mime'] = photo_mime
     normalized['raw_text_length'] = len(raw_text)
     normalized['ai_parsed'] = llm_payload is not None
+    normalized['resume_path'] = str(file_path)
     return normalized
 
 

@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Briefcase, Command, Keyboard, Menu, Moon, PlayCircle, RefreshCw, Search, Settings, ShieldAlert, Sun, UserRound, Workflow, X, } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Badge, Button, Card, IconButton, Kbd } from './components/ui';
 import { api } from './lib/api';
 import { ApplicationDetailPage } from './pages/ApplicationDetailPage';
@@ -12,6 +13,55 @@ import { ProfilePage } from './pages/ProfilePage';
 import { RunDetailPage } from './pages/RunDetailPage';
 import { RunsPage } from './pages/RunsPage';
 import { SettingsPage } from './pages/SettingsPage';
+function routePathForView(view) {
+    switch (view) {
+        case 'dashboard':
+            return '/';
+        case 'jobs':
+            return '/jobs';
+        case 'manual':
+            return '/manual';
+        case 'profile':
+            return '/profile';
+        case 'runs':
+            return '/runs';
+        case 'settings':
+            return '/settings';
+    }
+}
+function resolveRoute(pathname) {
+    if (pathname === '/' || pathname === '') {
+        return { view: 'dashboard', selectedJobId: null, selectedApplicationId: null, selectedRunId: null };
+    }
+    if (pathname === '/jobs') {
+        return { view: 'jobs', selectedJobId: null, selectedApplicationId: null, selectedRunId: null };
+    }
+    if (pathname.startsWith('/jobs/')) {
+        const id = pathname.slice('/jobs/'.length);
+        return { view: 'job-detail', selectedJobId: id || null, selectedApplicationId: null, selectedRunId: null };
+    }
+    if (pathname === '/manual') {
+        return { view: 'manual', selectedJobId: null, selectedApplicationId: null, selectedRunId: null };
+    }
+    if (pathname === '/profile') {
+        return { view: 'profile', selectedJobId: null, selectedApplicationId: null, selectedRunId: null };
+    }
+    if (pathname === '/runs') {
+        return { view: 'runs', selectedJobId: null, selectedApplicationId: null, selectedRunId: null };
+    }
+    if (pathname.startsWith('/runs/')) {
+        const id = pathname.slice('/runs/'.length);
+        return { view: 'run-detail', selectedJobId: null, selectedApplicationId: null, selectedRunId: id || null };
+    }
+    if (pathname === '/settings') {
+        return { view: 'settings', selectedJobId: null, selectedApplicationId: null, selectedRunId: null };
+    }
+    if (pathname.startsWith('/applications/')) {
+        const id = pathname.slice('/applications/'.length);
+        return { view: 'application-detail', selectedJobId: null, selectedApplicationId: id || null, selectedRunId: null };
+    }
+    return { view: 'dashboard', selectedJobId: null, selectedApplicationId: null, selectedRunId: null };
+}
 const navItems = [
     { id: 'dashboard', label: 'Overview', icon: Workflow },
     { id: 'runs', label: 'Pipelines (Runs)', icon: PlayCircle },
@@ -38,17 +88,18 @@ function getStoredTheme() {
     return stored === 'dark' || stored === 'light' ? stored : 'system';
 }
 export default function App() {
-    const [view, setView] = useState('dashboard');
+    const location = useLocation();
+    const navigate = useNavigate();
+    const routeState = useMemo(() => resolveRoute(location.pathname), [location.pathname]);
+    const view = routeState.view;
     const [runs, setRuns] = useState([]);
     const [jobs, setJobs] = useState([]);
+    const [jobsCounts, setJobsCounts] = useState({ total: 0, new: 0, queued: 0, applied: 0 });
     const [applications, setApplications] = useState([]);
     const [manualActions, setManualActions] = useState([]);
     const [profile, setProfile] = useState(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(null);
-    const [selectedJobId, setSelectedJobId] = useState(null);
-    const [selectedApplicationId, setSelectedApplicationId] = useState(null);
-    const [selectedRunId, setSelectedRunId] = useState(null);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [showShortcuts, setShowShortcuts] = useState(false);
     const [themeMode, setThemeMode] = useState(getStoredTheme);
@@ -70,7 +121,8 @@ export default function App() {
                 api.getProfile(),
             ]);
             setRuns(runsRes.items);
-            setJobs(jobsRes.items);
+            setJobs(jobsRes.items || []);
+            setJobsCounts(jobsRes.counts || { total: 0, new: 0, queued: 0, applied: 0 });
             setApplications(appRes.items);
             setManualActions(manualRes.items);
             setProfile(profileRes);
@@ -103,6 +155,9 @@ export default function App() {
         }
     }, [resolvedTheme, themeMode]);
     useEffect(() => {
+        setMobileNavOpen(false);
+    }, [location.pathname]);
+    useEffect(() => {
         const onKeyDown = (event) => {
             const target = event.target;
             const isTypingTarget = target instanceof HTMLInputElement ||
@@ -124,15 +179,15 @@ export default function App() {
                     goPrefixTimer.current = null;
                 }
                 if (key === 'r') {
-                    setView('runs');
+                    navigate('/runs');
                     return;
                 }
                 if (key === 'j') {
-                    setView('jobs');
+                    navigate('/jobs');
                     return;
                 }
                 if (key === 'd') {
-                    setView('dashboard');
+                    navigate('/');
                     return;
                 }
             }
@@ -151,7 +206,7 @@ export default function App() {
             }
             if (key === '/') {
                 event.preventDefault();
-                setView('runs');
+                navigate('/runs');
                 window.setTimeout(() => window.dispatchEvent(new Event('huntarr:focus-runs-search')), 0);
             }
             if (key === 'escape') {
@@ -164,14 +219,29 @@ export default function App() {
             if (goPrefixTimer.current)
                 window.clearTimeout(goPrefixTimer.current);
         };
-    }, [view]);
+    }, [navigate, view]);
     const latestRunId = useMemo(() => (runs[0]?.id ? String(runs[0].id) : null), [runs]);
     const startHunt = async () => {
         setBusy(true);
         try {
-            await api.createRun({ mode: 'manual', search_config: {} });
+            const search_config = {};
+            if (profile?.desired_job_title) {
+                search_config.role_keywords = [profile.desired_job_title];
+            }
+            if (profile?.desired_location) {
+                search_config.locations = [profile.desired_location];
+            }
+            if (profile?.job_sources) {
+                const enabledSources = Object.entries(profile.job_sources)
+                    .filter(([_, enabled]) => enabled)
+                    .map(([source]) => source);
+                if (enabledSources.length > 0) {
+                    search_config.sources = enabledSources;
+                }
+            }
+            await api.createRun({ mode: 'manual', search_config });
             await refresh();
-            setView('runs');
+            navigate('/runs');
         }
         finally {
             setBusy(false);
@@ -180,6 +250,15 @@ export default function App() {
     const onApplyNow = async (jobId) => {
         await api.applyNow(jobId);
         await refresh();
+    };
+    const onDeleteAll = async () => {
+        try {
+            await api.deleteJobs();
+            await refresh();
+        }
+        catch (err) {
+            setError(err.message ?? 'Failed to delete jobs');
+        }
     };
     const onStartManual = async (id) => {
         await api.startManualSession(id);
@@ -198,38 +277,31 @@ export default function App() {
         await refresh();
     };
     const onViewJob = (jobId) => {
-        setSelectedJobId(jobId);
-        setView('job-detail');
+        navigate(`/jobs/${jobId}`);
     };
     const onViewApplication = (applicationId) => {
-        setSelectedApplicationId(applicationId);
-        setView('application-detail');
+        navigate(`/applications/${applicationId}`);
     };
     const onBack = () => {
-        setSelectedJobId(null);
-        setSelectedApplicationId(null);
-        setSelectedRunId(null);
-        setView('jobs');
+        navigate('/jobs');
     };
     const onBackToRuns = () => {
-        setSelectedRunId(null);
-        setView('runs');
+        navigate('/runs');
     };
     const onSelectRun = (runId) => {
-        setSelectedRunId(runId);
-        setView('run-detail');
+        navigate(`/runs/${runId}`);
     };
     const navView = view === 'job-detail' || view === 'application-detail' ? 'jobs' : view === 'run-detail' ? 'runs' : view;
     const titleMeta = titleByView[view];
     const openRunsSearch = () => {
-        setView('runs');
+        navigate('/runs');
         window.setTimeout(() => window.dispatchEvent(new Event('huntarr:focus-runs-search')), 0);
     };
     const ShellNav = ({ mobile = false }) => (_jsxs("div", { className: "flex h-full flex-col", children: [_jsxs("div", { className: "border-b border-border px-4 py-5", children: [_jsx("p", { className: "font-display text-2xl text-text", children: "huntarr" }), _jsx("p", { className: "mt-1 text-xs uppercase tracking-[0.2em] text-muted", children: "control center" })] }), _jsx("nav", { className: "flex-1 space-y-1 px-3 py-4", children: navItems.map((item) => {
                     const Icon = item.icon;
                     const active = navView === item.id;
                     return (_jsxs("button", { type: "button", onClick: () => {
-                            setView(item.id);
+                            navigate(routePathForView(item.id));
                             if (mobile)
                                 setMobileNavOpen(false);
                         }, className: [
@@ -245,8 +317,8 @@ export default function App() {
                                                             ].join(' ') }), _jsx(Moon, { size: 16, className: [
                                                                 'absolute transition-all duration-150',
                                                                 resolvedTheme === 'dark' ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0',
-                                                            ].join(' ') })] }), themeMode !== 'system' ? (_jsx(Button, { variant: "ghost", className: "hidden border border-border text-xs lg:inline-flex", onClick: () => setThemeMode('system'), children: "System" })) : null, _jsx(IconButton, { title: "Show keyboard shortcuts", onClick: () => setShowShortcuts(true), children: _jsx(Keyboard, { size: 16 }) }), _jsx(IconButton, { title: "Refresh", onClick: refresh, children: _jsx(RefreshCw, { size: 16 }) }), _jsx(Button, { onClick: startHunt, disabled: busy, className: "text-xs sm:text-sm", children: "Start Hunt" }), _jsx("span", { className: "hidden h-9 w-9 items-center justify-center rounded-full border border-border bg-elevated text-xs font-bold text-muted sm:inline-flex", children: "HR" })] })] }) }), _jsx("main", { className: "flex-1 px-3 pb-3 pt-[var(--shell-gap)] md:px-4 md:pb-4", children: _jsxs("div", { className: "motion-enter rounded-[calc(var(--shell-radius)-8px)] border border-border bg-surface/95 p-4 shadow-panel md:p-6", children: [_jsxs("div", { className: "mb-4 flex flex-wrap items-center gap-2", children: [latestRunId ? _jsxs(Badge, { tone: "info", children: ["Latest run ", latestRunId.slice(0, 10)] }) : null, _jsxs(Badge, { tone: "default", children: ["Theme: ", themeMode === 'system' ? `system (${resolvedTheme})` : themeMode] }), _jsx(Badge, { tone: "success", children: "Auto refresh 8s" })] }), error ? _jsx(Card, { className: "mb-4 border-danger text-danger", variant: "muted", children: error }) : null, view === 'dashboard' ? _jsx(DashboardPage, { runs: runs, jobs: jobs, manualActions: manualActions, applications: applications }) : null, view === 'jobs' ? _jsx(JobsPage, { jobs: jobs, onApplyNow: onApplyNow, onViewJob: onViewJob }) : null, view === 'manual' ? _jsx(ManualQueuePage, { actions: manualActions, onStart: onStartManual, onResolve: onResolveManual }) : null, view === 'profile' ? (_jsx(ProfilePage, { profile: profile, onSave: async (payload) => {
+                                                            ].join(' ') })] }), themeMode !== 'system' ? (_jsx(Button, { variant: "ghost", className: "hidden border border-border text-xs lg:inline-flex", onClick: () => setThemeMode('system'), children: "System" })) : null, _jsx(IconButton, { title: "Show keyboard shortcuts", onClick: () => setShowShortcuts(true), children: _jsx(Keyboard, { size: 16 }) }), _jsx(IconButton, { title: "Refresh", onClick: refresh, children: _jsx(RefreshCw, { size: 16 }) }), _jsx(Button, { onClick: startHunt, disabled: busy, className: "text-xs sm:text-sm", children: "Start Hunt" }), _jsx("span", { className: "hidden h-9 w-9 items-center justify-center rounded-full border border-border bg-elevated text-xs font-bold text-muted sm:inline-flex", children: "HR" })] })] }) }), _jsx("main", { className: "flex-1 px-3 pb-3 pt-[var(--shell-gap)] md:px-4 md:pb-4", children: _jsxs("div", { className: "motion-enter rounded-[calc(var(--shell-radius)-8px)] border border-border bg-surface/95 p-4 shadow-panel md:p-6", children: [_jsxs("div", { className: "mb-4 flex flex-wrap items-center gap-2", children: [latestRunId ? _jsxs(Badge, { tone: "info", children: ["Latest run ", latestRunId.slice(0, 10)] }) : null, _jsxs(Badge, { tone: "default", children: ["Theme: ", themeMode === 'system' ? `system (${resolvedTheme})` : themeMode] }), _jsx(Badge, { tone: "success", children: "Auto refresh 8s" })] }), error ? _jsx(Card, { className: "mb-4 border-danger text-danger", variant: "muted", children: error }) : null, view === 'dashboard' ? _jsx(DashboardPage, { runs: runs, jobs: jobs, manualActions: manualActions, applications: applications }) : null, view === 'jobs' ? _jsx(JobsPage, { jobs: jobs, counts: jobsCounts, onApplyNow: onApplyNow, onViewJob: onViewJob, onDeleteAll: onDeleteAll }) : null, view === 'manual' ? _jsx(ManualQueuePage, { actions: manualActions, onStart: onStartManual, onResolve: onResolveManual }) : null, view === 'profile' ? (_jsx(ProfilePage, { profile: profile, onSave: async (payload) => {
                                                 await api.saveProfile(payload);
                                                 await refresh();
-                                            } })) : null, view === 'runs' ? (_jsx(RunsPage, { runs: runs, jobs: jobs, applications: applications, manualActions: manualActions, onSelectRun: onSelectRun, onPauseRun: onPauseRun, onResumeRun: onResumeRun })) : null, view === 'settings' ? _jsx(SettingsPage, {}) : null, view === 'job-detail' && selectedJobId ? (_jsx(JobDetailPage, { jobId: selectedJobId, onBack: onBack, onViewApplication: onViewApplication })) : null, view === 'application-detail' && selectedApplicationId ? (_jsx(ApplicationDetailPage, { applicationId: selectedApplicationId, onBack: onBack })) : null, view === 'run-detail' && selectedRunId ? _jsx(RunDetailPage, { runId: selectedRunId, onBack: onBackToRuns }) : null] }) })] })] }), showShortcuts ? (_jsx("div", { className: "fixed inset-0 z-50 grid place-items-center bg-black/55 p-4", children: _jsxs(Card, { className: "w-full max-w-xl border-border bg-surface p-5", variant: "panel", children: [_jsxs("div", { className: "mb-4 flex items-center justify-between", children: [_jsx("h2", { className: "font-display text-xl text-text", children: "Keyboard Shortcuts" }), _jsx(IconButton, { title: "Close shortcuts", onClick: () => setShowShortcuts(false), children: _jsx(X, { size: 16 }) })] }), _jsxs("div", { className: "space-y-2 text-sm text-muted", children: [_jsxs("p", { children: [_jsx(Kbd, { children: "g" }), " then ", _jsx(Kbd, { children: "r" }), ": go to Pipelines (Runs)"] }), _jsxs("p", { children: [_jsx(Kbd, { children: "g" }), " then ", _jsx(Kbd, { children: "j" }), ": go to Jobs"] }), _jsxs("p", { children: [_jsx(Kbd, { children: "g" }), " then ", _jsx(Kbd, { children: "d" }), ": go to Overview"] }), _jsxs("p", { children: [_jsx(Kbd, { children: "f" }), ": focus run search (from Runs page)"] }), _jsxs("p", { children: [_jsx(Kbd, { children: "/" }), ": jump to runs search"] }), _jsxs("p", { children: [_jsx(Kbd, { children: "?" }), ": open/close shortcuts dialog"] }), _jsxs("p", { children: [_jsx(Kbd, { children: "Esc" }), ": close overlays and run row focus"] })] }), _jsx("div", { className: "mt-5 flex justify-end", children: _jsxs(Button, { variant: "secondary", onClick: () => setShowShortcuts(false), children: [_jsx(Command, { size: 14 }), " Close"] }) })] }) })) : null] }));
+                                            } })) : null, view === 'runs' ? (_jsx(RunsPage, { runs: runs, jobs: jobs, applications: applications, manualActions: manualActions, onSelectRun: onSelectRun, onPauseRun: onPauseRun, onResumeRun: onResumeRun })) : null, view === 'settings' ? _jsx(SettingsPage, {}) : null, view === 'job-detail' && routeState.selectedJobId ? (_jsx(JobDetailPage, { jobId: routeState.selectedJobId, onBack: onBack, onViewApplication: onViewApplication })) : null, view === 'application-detail' && routeState.selectedApplicationId ? (_jsx(ApplicationDetailPage, { applicationId: routeState.selectedApplicationId, onBack: onBack })) : null, view === 'run-detail' && routeState.selectedRunId ? _jsx(RunDetailPage, { runId: routeState.selectedRunId, onBack: onBackToRuns }) : null] }) })] })] }), showShortcuts ? (_jsx("div", { className: "fixed inset-0 z-50 grid place-items-center bg-black/55 p-4", children: _jsxs(Card, { className: "w-full max-w-xl border-border bg-surface p-5", variant: "panel", children: [_jsxs("div", { className: "mb-4 flex items-center justify-between", children: [_jsx("h2", { className: "font-display text-xl text-text", children: "Keyboard Shortcuts" }), _jsx(IconButton, { title: "Close shortcuts", onClick: () => setShowShortcuts(false), children: _jsx(X, { size: 16 }) })] }), _jsxs("div", { className: "space-y-2 text-sm text-muted", children: [_jsxs("p", { children: [_jsx(Kbd, { children: "g" }), " then ", _jsx(Kbd, { children: "r" }), ": go to Pipelines (Runs)"] }), _jsxs("p", { children: [_jsx(Kbd, { children: "g" }), " then ", _jsx(Kbd, { children: "j" }), ": go to Jobs"] }), _jsxs("p", { children: [_jsx(Kbd, { children: "g" }), " then ", _jsx(Kbd, { children: "d" }), ": go to Overview"] }), _jsxs("p", { children: [_jsx(Kbd, { children: "f" }), ": focus run search (from Runs page)"] }), _jsxs("p", { children: [_jsx(Kbd, { children: "/" }), ": jump to runs search"] }), _jsxs("p", { children: [_jsx(Kbd, { children: "?" }), ": open/close shortcuts dialog"] }), _jsxs("p", { children: [_jsx(Kbd, { children: "Esc" }), ": close overlays and run row focus"] })] }), _jsx("div", { className: "mt-5 flex justify-end", children: _jsxs(Button, { variant: "secondary", onClick: () => setShowShortcuts(false), children: [_jsx(Command, { size: 14 }), " Close"] }) })] }) })) : null] }));
 }

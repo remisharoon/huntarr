@@ -9,18 +9,60 @@ const defaultProviderForm = {
     model: 'gpt-4o-mini',
     api_key: '',
 };
+const defaultJobSources = {
+    remoteok: true,
+    weworkremotely: true,
+    brave_search: true,
+};
+function normalizeJobSources(source) {
+    if (!source || typeof source !== 'object') {
+        return { ...defaultJobSources };
+    }
+    const value = source;
+    return {
+        remoteok: Boolean(value.remoteok),
+        weworkremotely: Boolean(value.weworkremotely),
+        brave_search: Boolean(value.brave_search),
+    };
+}
+function normalizeProfileForSettings(profile) {
+    if (!profile)
+        return null;
+    return {
+        ...profile,
+        full_name: profile.full_name || '',
+        email: profile.email || '',
+        years_experience: profile.years_experience ?? 0,
+        summary: profile.summary || '',
+        skills: profile.skills || [],
+        experience: profile.experience || [],
+        education: profile.education || [],
+        awards: profile.awards || [],
+        certifications: profile.certifications || [],
+        projects: profile.projects || [],
+        languages: profile.languages || [],
+        links: profile.links || [],
+        preferences: profile.preferences || {},
+    };
+}
 export function SettingsPage() {
     const [config, setConfig] = useState({});
     const [credentials, setCredentials] = useState([]);
     const [schedules, setSchedules] = useState([]);
     const [providers, setProviders] = useState([]);
     const [activeProviderId, setActiveProviderId] = useState(null);
+    const [profile, setProfile] = useState(null);
+    const [jobSources, setJobSources] = useState({ ...defaultJobSources });
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState(null);
     const [editingProviderId, setEditingProviderId] = useState(null);
     const [providerForm, setProviderForm] = useState({ ...defaultProviderForm });
     const [newCredential, setNewCredential] = useState({ domain: '', username: '', password: '' });
     const [newSchedule, setNewSchedule] = useState({ name: '', cron_expr: '', timezone: 'UTC', payload: '{}' });
+    const [openRouterApiKey, setOpenRouterApiKey] = useState('');
+    const [openRouterModel, setOpenRouterModel] = useState('openai/gpt-4o-mini');
+    const [steelApiKey, setSteelApiKey] = useState('');
+    const [steelProjectId, setSteelProjectId] = useState('');
     const flashMessage = (text) => {
         setMessage(text);
         setTimeout(() => setMessage(null), 2500);
@@ -31,17 +73,35 @@ export function SettingsPage() {
     };
     const loadData = async () => {
         try {
-            const [configRes, credentialsRes, schedulesRes, providersRes] = await Promise.all([
+            const [configRes, credentialsRes, schedulesRes, providersRes, profileRes] = await Promise.all([
                 api.getConfig(),
                 api.listCredentials(),
                 api.listSchedules(),
                 api.listLLMProviders(),
+                api.getProfile(),
             ]);
             setConfig(configRes.value || {});
             setCredentials(credentialsRes.items || []);
             setSchedules(schedulesRes.items || []);
             setProviders(providersRes.items || []);
             setActiveProviderId(providersRes.active_provider_id ?? null);
+            const normalizedProfile = normalizeProfileForSettings(profileRes);
+            setProfile(normalizedProfile);
+            setJobSources(normalizeJobSources(profileRes.job_sources));
+            try {
+                const [openRouterCred, steelCred] = await Promise.all([
+                    api.getCredential('openrouter.ai', 'default'),
+                    api.getCredential('steel.dev', 'default'),
+                ]);
+                setOpenRouterApiKey(openRouterCred?.password || '');
+                setSteelApiKey(steelCred?.password || '');
+            }
+            catch {
+                setOpenRouterApiKey('');
+                setSteelApiKey('');
+            }
+            setOpenRouterModel(configRes?.value?.openrouter_model || 'openai/gpt-4o-mini');
+            setSteelProjectId(configRes?.value?.steel_project_id || '');
         }
         catch (err) {
             setMessage(`Error loading settings: ${err.message}`);
@@ -60,6 +120,25 @@ export function SettingsPage() {
         }
         catch (err) {
             setMessage(`Error saving settings: ${err.message}`);
+        }
+        finally {
+            setBusy(false);
+        }
+    };
+    const updateJobSources = async (sources) => {
+        setBusy(true);
+        try {
+            if (!profile) {
+                throw new Error('Profile not loaded yet');
+            }
+            const updatedProfile = { ...profile, job_sources: sources };
+            await api.saveProfile(updatedProfile);
+            setJobSources(sources);
+            setProfile(updatedProfile);
+            flashMessage('Job sources updated successfully');
+        }
+        catch (err) {
+            setMessage(`Error updating job sources: ${err.message}`);
         }
         finally {
             setBusy(false);
@@ -273,7 +352,94 @@ export function SettingsPage() {
             setBusy(false);
         }
     };
-    return (_jsxs("div", { className: "space-y-4", children: [_jsx(PageHeader, { title: "Settings", subtitle: "Configure LLM providers, ATS credentials, behavior flags, and scheduling.", actions: _jsx(Badge, { tone: busy ? 'warning' : 'success', children: busy ? 'Processing' : 'Ready' }) }), message ? _jsx(Card, { variant: "muted", className: "border-accent/50 text-accent", children: message }) : null, _jsxs(Card, { className: "space-y-4", children: [_jsxs("div", { className: "flex items-center justify-between", children: [_jsx("h2", { className: "font-display text-xl text-text", children: "LLM Providers (OpenAI-compatible)" }), _jsx(Badge, { tone: "info", children: providers.length })] }), _jsxs("div", { className: "space-y-1 text-xs text-muted", children: [_jsx("p", { children: "Active provider is used for resume parsing and AI-powered features." }), _jsx("p", { children: "Endpoint must support OpenAI Chat Completions." }), _jsx("p", { children: "API keys are encrypted at rest." })] }), providers.length === 0 ? (_jsx("p", { className: "text-sm text-muted", children: "No LLM providers configured yet." })) : (_jsxs("div", { className: "space-y-2", children: [_jsxs("div", { className: "hidden grid-cols-[1fr_1.1fr_0.8fr_0.6fr_0.6fr_auto] gap-2 rounded-xl border border-border bg-elevated/50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted md:grid", children: [_jsx("span", { children: "Name" }), _jsx("span", { children: "Base URL" }), _jsx("span", { children: "Model" }), _jsx("span", { children: "Key" }), _jsx("span", { children: "Status" }), _jsx("span", { children: "Actions" })] }), providers.map((provider) => (_jsxs("div", { className: "grid grid-cols-1 gap-2 rounded-xl border border-border bg-elevated/60 px-3 py-2 md:grid-cols-[1fr_1.1fr_0.8fr_0.6fr_0.6fr_auto] md:items-center", children: [_jsxs("div", { children: [_jsx("p", { className: "text-xs text-muted md:hidden", children: "Name" }), _jsx("p", { className: "font-semibold text-text", children: provider.name })] }), _jsxs("div", { children: [_jsx("p", { className: "text-xs text-muted md:hidden", children: "Base URL" }), _jsx("p", { className: "truncate text-sm text-text", children: provider.base_url })] }), _jsxs("div", { children: [_jsx("p", { className: "text-xs text-muted md:hidden", children: "Model" }), _jsx("p", { className: "text-sm text-text", children: provider.model })] }), _jsxs("div", { children: [_jsx("p", { className: "text-xs text-muted md:hidden", children: "Key" }), _jsx("p", { className: "text-sm text-text", children: !provider.has_api_key ? 'Missing' : provider.key_source === 'vault' ? 'Vault' : 'Env fallback' })] }), _jsxs("div", { children: [_jsx("p", { className: "text-xs text-muted md:hidden", children: "Status" }), _jsx(Badge, { tone: provider.id === activeProviderId ? 'success' : 'default', children: provider.id === activeProviderId ? 'Active' : 'Inactive' })] }), _jsxs("div", { className: "flex flex-wrap gap-1", children: [_jsx(Button, { variant: "secondary", className: "h-8 px-2 text-xs", onClick: () => testProviderById(provider.id), children: "Test provider" }), _jsxs(Button, { variant: "ghost", className: "h-8 px-2 text-xs", onClick: () => beginEditProvider(provider), children: [_jsx(Pencil, { size: 14 }), " Edit"] }), _jsxs(Button, { variant: "ghost", className: "h-8 px-2 text-xs", disabled: provider.id === activeProviderId, onClick: () => activateProvider(provider.id), children: [_jsx(Check, { size: 14 }), " Set active"] }), _jsxs(Button, { variant: "danger", className: "h-8 px-2 text-xs", onClick: () => removeProvider(provider), children: [_jsx(Trash2, { size: 14 }), " Delete"] })] })] }, provider.id)))] })), _jsxs("form", { onSubmit: saveProvider, className: "space-y-2 rounded-xl border border-border bg-elevated/50 p-3", children: [_jsx("p", { className: "text-sm font-semibold text-text", children: editingProviderId ? 'Edit provider' : 'Add provider' }), _jsxs("div", { className: "grid gap-2 md:grid-cols-2", children: [_jsx(Input, { placeholder: "Provider name", value: providerForm.name, onChange: (event) => setProviderForm({ ...providerForm, name: event.target.value }) }), _jsx(Input, { placeholder: "Base URL", value: providerForm.base_url, onChange: (event) => setProviderForm({ ...providerForm, base_url: event.target.value }) }), _jsx(Input, { placeholder: "Model", value: providerForm.model, onChange: (event) => setProviderForm({ ...providerForm, model: event.target.value }) }), _jsx(Input, { type: "password", placeholder: "API key", value: providerForm.api_key, onChange: (event) => setProviderForm({ ...providerForm, api_key: event.target.value }) })] }), _jsxs("div", { className: "flex flex-wrap gap-2", children: [_jsx(Button, { type: "button", variant: "secondary", className: "h-8 px-2 text-xs", onClick: testProviderFromForm, children: "Test provider" }), _jsxs(Button, { type: "submit", disabled: busy, className: "h-8 px-2 text-xs", children: [_jsx(Plus, { size: 14 }), " Save provider"] }), editingProviderId ? (_jsx(Button, { type: "button", variant: "ghost", className: "h-8 px-2 text-xs", onClick: resetProviderForm, children: "Cancel edit" })) : null] })] })] }), _jsxs("div", { className: "grid gap-4 xl:grid-cols-2", children: [_jsxs(Card, { className: "space-y-4", children: [_jsx("h2", { className: "font-display text-xl text-text", children: "Application Behavior" }), _jsxs("div", { className: "space-y-2 rounded-xl border border-border bg-elevated/50 p-3", children: [_jsxs("label", { className: "flex items-center gap-2 text-sm font-semibold text-text", children: [_jsx("input", { type: "checkbox", checked: config.auto_submit_enabled ?? true, onChange: (event) => {
+    const saveByokKeys = async () => {
+        setBusy(true);
+        try {
+            if (openRouterApiKey.trim()) {
+                await api.storeCredential({
+                    domain: 'openrouter.ai',
+                    username: 'default',
+                    password: openRouterApiKey.trim(),
+                    metadata: { provider: 'openrouter', byok: true },
+                });
+            }
+            if (steelApiKey.trim()) {
+                await api.storeCredential({
+                    domain: 'steel.dev',
+                    username: 'default',
+                    password: steelApiKey.trim(),
+                    metadata: { provider: 'steel', byok: true },
+                });
+            }
+            await saveConfig({
+                openrouter_model: openRouterModel.trim() || 'openai/gpt-4o-mini',
+                steel_project_id: steelProjectId.trim(),
+            });
+            flashMessage('BYOK settings saved');
+            await loadData();
+        }
+        catch (err) {
+            setMessage(`Failed to save BYOK settings: ${err.message}`);
+        }
+        finally {
+            setBusy(false);
+        }
+    };
+    const testOpenRouterKey = async () => {
+        if (!openRouterApiKey.trim()) {
+            setMessage('OpenRouter API key is required');
+            return;
+        }
+        setBusy(true);
+        try {
+            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${openRouterApiKey.trim()}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: openRouterModel.trim() || 'openai/gpt-4o-mini',
+                    messages: [{ role: 'user', content: 'Reply only with: ok' }],
+                    max_tokens: 8,
+                    temperature: 0,
+                }),
+            });
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text || `OpenRouter test failed (${response.status})`);
+            }
+            flashMessage('OpenRouter key test succeeded');
+        }
+        catch (err) {
+            setMessage(`OpenRouter test failed: ${err.message}`);
+        }
+        finally {
+            setBusy(false);
+        }
+    };
+    const testSteelKey = async () => {
+        if (!steelApiKey.trim()) {
+            setMessage('Steel API key is required');
+            return;
+        }
+        setBusy(true);
+        try {
+            const result = await api.createSteelSession({
+                api_key: steelApiKey.trim(),
+                project_id: steelProjectId.trim() || undefined,
+                metadata: { source: 'huntarr-settings-test' },
+            });
+            flashMessage(result.message || 'Steel key test succeeded');
+        }
+        catch (err) {
+            setMessage(`Steel test failed: ${err.message}`);
+        }
+        finally {
+            setBusy(false);
+        }
+    };
+    return (_jsxs("div", { className: "space-y-4", children: [_jsx(PageHeader, { title: "Settings", subtitle: "Configure LLM providers, ATS credentials, behavior flags, and scheduling.", actions: _jsx(Badge, { tone: busy ? 'warning' : 'success', children: busy ? 'Processing' : 'Ready' }) }), message ? _jsx(Card, { variant: "muted", className: "border-accent/50 text-accent", children: message }) : null, _jsxs(Card, { className: "space-y-4", children: [_jsxs("div", { className: "flex items-center justify-between", children: [_jsx("h2", { className: "font-display text-xl text-text", children: "BYOK Providers" }), _jsx(Badge, { tone: "info", children: "OpenRouter + Steel.dev" })] }), _jsxs("div", { className: "space-y-1 text-xs text-muted", children: [_jsx("p", { children: "Bring your own keys. Huntarr does not ship with shared API keys." }), _jsx("p", { children: "OpenRouter key is used directly from the browser for AI tasks." }), _jsx("p", { children: "Steel key is used only when creating automation sessions." })] }), _jsxs("div", { className: "grid gap-4 lg:grid-cols-2", children: [_jsxs("div", { className: "space-y-2 rounded-xl border border-border bg-elevated/50 p-3", children: [_jsx("p", { className: "text-sm font-semibold text-text", children: "OpenRouter (BYOK)" }), _jsx(Input, { type: "password", placeholder: "OpenRouter API key", value: openRouterApiKey, onChange: (event) => setOpenRouterApiKey(event.target.value) }), _jsx(Input, { placeholder: "Model (e.g. openai/gpt-4o-mini)", value: openRouterModel, onChange: (event) => setOpenRouterModel(event.target.value) }), _jsx(Button, { type: "button", variant: "secondary", className: "h-8 px-2 text-xs", onClick: testOpenRouterKey, children: "Test OpenRouter Key" })] }), _jsxs("div", { className: "space-y-2 rounded-xl border border-border bg-elevated/50 p-3", children: [_jsx("p", { className: "text-sm font-semibold text-text", children: "Steel.dev (BYOK)" }), _jsx(Input, { type: "password", placeholder: "Steel API key", value: steelApiKey, onChange: (event) => setSteelApiKey(event.target.value) }), _jsx(Input, { placeholder: "Steel project ID (optional)", value: steelProjectId, onChange: (event) => setSteelProjectId(event.target.value) }), _jsx(Button, { type: "button", variant: "secondary", className: "h-8 px-2 text-xs", onClick: testSteelKey, children: "Test Steel Key" })] })] }), _jsx("div", { className: "flex justify-end", children: _jsx(Button, { type: "button", disabled: busy, onClick: saveByokKeys, className: "h-8 px-3 text-xs", children: "Save BYOK Settings" }) })] }), _jsxs(Card, { className: "space-y-4", children: [_jsxs("div", { className: "flex items-center justify-between", children: [_jsx("h2", { className: "font-display text-xl text-text", children: "LLM Providers (OpenAI-compatible)" }), _jsx(Badge, { tone: "info", children: providers.length })] }), _jsxs("div", { className: "space-y-1 text-xs text-muted", children: [_jsx("p", { children: "Active provider is used for resume parsing and AI-powered features." }), _jsx("p", { children: "Endpoint must support OpenAI Chat Completions." }), _jsx("p", { children: "API keys are encrypted at rest." })] }), providers.length === 0 ? (_jsx("p", { className: "text-sm text-muted", children: "No LLM providers configured yet." })) : (_jsxs("div", { className: "space-y-2", children: [_jsxs("div", { className: "hidden grid-cols-[1fr_1.1fr_0.8fr_0.6fr_0.6fr_auto] gap-2 rounded-xl border border-border bg-elevated/50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted md:grid", children: [_jsx("span", { children: "Name" }), _jsx("span", { children: "Base URL" }), _jsx("span", { children: "Model" }), _jsx("span", { children: "Key" }), _jsx("span", { children: "Status" }), _jsx("span", { children: "Actions" })] }), providers.map((provider) => (_jsxs("div", { className: "grid grid-cols-1 gap-2 rounded-xl border border-border bg-elevated/60 px-3 py-2 md:grid-cols-[1fr_1.1fr_0.8fr_0.6fr_0.6fr_auto] md:items-center", children: [_jsxs("div", { children: [_jsx("p", { className: "text-xs text-muted md:hidden", children: "Name" }), _jsx("p", { className: "font-semibold text-text", children: provider.name })] }), _jsxs("div", { children: [_jsx("p", { className: "text-xs text-muted md:hidden", children: "Base URL" }), _jsx("p", { className: "truncate text-sm text-text", children: provider.base_url })] }), _jsxs("div", { children: [_jsx("p", { className: "text-xs text-muted md:hidden", children: "Model" }), _jsx("p", { className: "text-sm text-text", children: provider.model })] }), _jsxs("div", { children: [_jsx("p", { className: "text-xs text-muted md:hidden", children: "Key" }), _jsx("p", { className: "text-sm text-text", children: !provider.has_api_key ? 'Missing' : provider.key_source === 'vault' ? 'Vault' : 'Env fallback' })] }), _jsxs("div", { children: [_jsx("p", { className: "text-xs text-muted md:hidden", children: "Status" }), _jsx(Badge, { tone: provider.id === activeProviderId ? 'success' : 'default', children: provider.id === activeProviderId ? 'Active' : 'Inactive' })] }), _jsxs("div", { className: "flex flex-wrap gap-1", children: [_jsx(Button, { variant: "secondary", className: "h-8 px-2 text-xs", onClick: () => testProviderById(provider.id), children: "Test provider" }), _jsxs(Button, { variant: "ghost", className: "h-8 px-2 text-xs", onClick: () => beginEditProvider(provider), children: [_jsx(Pencil, { size: 14 }), " Edit"] }), _jsxs(Button, { variant: "ghost", className: "h-8 px-2 text-xs", disabled: provider.id === activeProviderId, onClick: () => activateProvider(provider.id), children: [_jsx(Check, { size: 14 }), " Set active"] }), _jsxs(Button, { variant: "danger", className: "h-8 px-2 text-xs", onClick: () => removeProvider(provider), children: [_jsx(Trash2, { size: 14 }), " Delete"] })] })] }, provider.id)))] })), _jsxs("form", { onSubmit: saveProvider, className: "space-y-2 rounded-xl border border-border bg-elevated/50 p-3", children: [_jsx("p", { className: "text-sm font-semibold text-text", children: editingProviderId ? 'Edit provider' : 'Add provider' }), _jsxs("div", { className: "grid gap-2 md:grid-cols-2", children: [_jsx(Input, { placeholder: "Provider name", value: providerForm.name, onChange: (event) => setProviderForm({ ...providerForm, name: event.target.value }) }), _jsx(Input, { placeholder: "Base URL", value: providerForm.base_url, onChange: (event) => setProviderForm({ ...providerForm, base_url: event.target.value }) }), _jsx(Input, { placeholder: "Model", value: providerForm.model, onChange: (event) => setProviderForm({ ...providerForm, model: event.target.value }) }), _jsx(Input, { type: "password", placeholder: "API key", value: providerForm.api_key, onChange: (event) => setProviderForm({ ...providerForm, api_key: event.target.value }) })] }), _jsxs("div", { className: "flex flex-wrap gap-2", children: [_jsx(Button, { type: "button", variant: "secondary", className: "h-8 px-2 text-xs", onClick: testProviderFromForm, children: "Test provider" }), _jsxs(Button, { type: "submit", disabled: busy, className: "h-8 px-2 text-xs", children: [_jsx(Plus, { size: 14 }), " Save provider"] }), editingProviderId ? (_jsx(Button, { type: "button", variant: "ghost", className: "h-8 px-2 text-xs", onClick: resetProviderForm, children: "Cancel edit" })) : null] })] })] }), _jsxs(Card, { className: "space-y-4", children: [_jsx("h2", { className: "font-display text-xl text-text", children: "Job Sources" }), _jsx("p", { className: "text-sm text-muted", children: "Select which job sources to query when starting hunts. All sources run in parallel." }), _jsxs("div", { className: "space-y-2", children: [_jsxs("label", { className: "flex items-center justify-between rounded-xl border border-border bg-elevated/50 px-3 py-2", children: [_jsxs("div", { className: "flex items-center gap-3", children: [_jsx("input", { type: "checkbox", checked: jobSources.remoteok, onChange: (event) => updateJobSources({ ...jobSources, remoteok: event.target.checked }), disabled: busy }), _jsxs("div", { children: [_jsx("p", { className: "text-sm font-semibold text-text", children: "RemoteOK" }), _jsx("p", { className: "text-xs text-muted", children: "remoteok.com API - remote-focused jobs" })] })] }), _jsx(Badge, { tone: "success", children: "Ready" })] }), _jsxs("label", { className: "flex items-center justify-between rounded-xl border border-border bg-elevated/50 px-3 py-2", children: [_jsxs("div", { className: "flex items-center gap-3", children: [_jsx("input", { type: "checkbox", checked: jobSources.weworkremotely, onChange: (event) => updateJobSources({ ...jobSources, weworkremotely: event.target.checked }), disabled: busy }), _jsxs("div", { children: [_jsx("p", { className: "text-sm font-semibold text-text", children: "WeWorkRemotely" }), _jsx("p", { className: "text-xs text-muted", children: "weworkremotely.com - RSS feed scraping" })] })] }), _jsx(Badge, { tone: "success", children: "Ready" })] }), _jsxs("label", { className: "flex items-center justify-between rounded-xl border border-border bg-elevated/50 px-3 py-2", children: [_jsxs("div", { className: "flex items-center gap-3", children: [_jsx("input", { type: "checkbox", checked: jobSources.brave_search, onChange: (event) => updateJobSources({ ...jobSources, brave_search: event.target.checked }), disabled: busy }), _jsxs("div", { children: [_jsx("p", { className: "text-sm font-semibold text-text", children: "Brave Search" }), _jsx("p", { className: "text-xs text-muted", children: "ATS domains (Greenhouse, Lever, Workday)" })] })] }), _jsx(Badge, { tone: "warning", children: "Check API key" })] })] })] }), _jsxs("div", { className: "grid gap-4 xl:grid-cols-2", children: [_jsxs(Card, { className: "space-y-4", children: [_jsx("h2", { className: "font-display text-xl text-text", children: "Application Behavior" }), _jsxs("div", { className: "space-y-2 rounded-xl border border-border bg-elevated/50 p-3", children: [_jsxs("label", { className: "flex items-center gap-2 text-sm font-semibold text-text", children: [_jsx("input", { type: "checkbox", checked: config.auto_submit_enabled ?? true, onChange: (event) => {
                                                     const value = event.target.checked;
                                                     setConfig({ ...config, auto_submit_enabled: value });
                                                     saveConfig({ auto_submit_enabled: value });

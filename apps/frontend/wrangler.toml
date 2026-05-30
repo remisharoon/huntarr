@@ -1,0 +1,10 @@
+name = "huntarr-web"
+compatibility_date = "2026-05-29"
+pages_build_output_dir = "dist"
+
+[vars]
+CLERK_JWKS_URL = ""
+CLERK_ISSUER = ""
+
+# Set secrets in Cloudflare Pages:
+# wrangler pages secret put NEON_DATABASE_URL

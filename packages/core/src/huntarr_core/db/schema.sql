@@ -18,7 +18,10 @@ CREATE TABLE IF NOT EXISTS profiles (
   links JSONB NOT NULL DEFAULT '[]'::jsonb,
   profile_photo_path TEXT,
   profile_photo_mime TEXT,
+  resume_path TEXT,
   preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
+  desired_job_title TEXT,
+  desired_location TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -30,11 +33,16 @@ ALTER TABLE IF EXISTS profiles ADD COLUMN IF NOT EXISTS languages JSONB NOT NULL
 ALTER TABLE IF EXISTS profiles ADD COLUMN IF NOT EXISTS links JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE IF EXISTS profiles ADD COLUMN IF NOT EXISTS profile_photo_path TEXT;
 ALTER TABLE IF EXISTS profiles ADD COLUMN IF NOT EXISTS profile_photo_mime TEXT;
+ALTER TABLE IF EXISTS profiles ADD COLUMN IF NOT EXISTS desired_job_title TEXT;
+ALTER TABLE IF EXISTS profiles ADD COLUMN IF NOT EXISTS desired_location TEXT;
+ALTER TABLE IF EXISTS profiles ADD COLUMN IF NOT EXISTS resume_path TEXT;
+ALTER TABLE IF EXISTS search_preferences ADD COLUMN IF NOT EXISTS sources JSONB DEFAULT '["remoteok","weworkremotely","brave_search"]'::jsonb;
 
 CREATE TABLE IF NOT EXISTS search_preferences (
   profile_id UUID PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
   rule_config JSONB NOT NULL DEFAULT '{}'::jsonb,
   natural_language_override TEXT,
+  sources JSONB DEFAULT '["remoteok","weworkremotely","brave_search"]'::jsonb,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

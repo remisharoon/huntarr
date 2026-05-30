@@ -1,10 +1,19 @@
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000';
+let authTokenResolver = null;
+export function setApiAuthTokenResolver(resolver) {
+    authTokenResolver = resolver;
+}
 async function request(path, init) {
+    const authToken = authTokenResolver ? await authTokenResolver() : null;
+    const headers = new Headers(init?.headers ?? {});
+    if (!headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json');
+    }
+    if (authToken && !headers.has('Authorization')) {
+        headers.set('Authorization', `Bearer ${authToken}`);
+    }
     const response = await fetch(`${API_BASE}${path}`, {
-        headers: {
-            'Content-Type': 'application/json',
-            ...(init?.headers ?? {}),
-        },
+        headers,
         ...init,
     });
     if (!response.ok) {
@@ -30,6 +39,7 @@ export const api = {
     getJob: (id) => request(`/api/jobs/${id}`),
     getJobDetail: (id) => request(`/api/jobs/${id}`),
     applyNow: (id) => request(`/api/jobs/${id}/apply-now`, { method: 'POST' }),
+    deleteJobs: () => request('/api/jobs', { method: 'DELETE' }),
     listApplications: () => request('/api/applications'),
     getApplicationDetail: (id) => request(`/api/applications/${id}`),
     listManualActions: () => request('/api/manual-actions'),
@@ -55,10 +65,23 @@ export const api = {
     getCredential: (domain, username) => request(`/api/credentials/${domain}/${username}`),
     deleteCredential: (domain, username) => request(`/api/credentials/${domain}/${username}`, { method: 'DELETE' }),
     storeCredential: (body) => request('/api/credentials', { method: 'POST', body: JSON.stringify(body) }),
+    createSteelSession: (body) => request('/api/byok/steel/session', { method: 'POST', body: JSON.stringify(body) }),
     importResume: (file) => {
         const fd = new FormData();
         fd.append('file', file);
-        return fetch(`${API_BASE}/api/profile/import-resume`, { method: 'POST', body: fd }).then(async (r) => {
+        const send = async () => {
+            const authToken = authTokenResolver ? await authTokenResolver() : null;
+            const headers = new Headers();
+            if (authToken) {
+                headers.set('Authorization', `Bearer ${authToken}`);
+            }
+            return fetch(`${API_BASE}/api/profile/import-resume`, {
+                method: 'POST',
+                body: fd,
+                headers,
+            });
+        };
+        return send().then(async (r) => {
             if (!r.ok) {
                 const text = await r.text();
                 throw new Error(text || `HTTP ${r.status}`);

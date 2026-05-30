@@ -70,6 +70,14 @@ class ApplicationEngine:
                         artifacts={"landing_screenshot": str(landing_path)},
                     )
 
+                # Follow external apply link if this is a job listing page (e.g. RemoteOK, WWR)
+                apply_url = await self._find_apply_link(page, url)
+                if apply_url:
+                    await page.goto(apply_url, wait_until="domcontentloaded", timeout=50000)
+                    await self._random_delay(0.5, 1.0)
+                    domain = urlparse(apply_url).netloc.lower().removeprefix("www.")
+                    url = apply_url
+
                 login_hint = await self._detect_login_gate(page)
                 if login_hint and is_restricted_platform(url):
                     await browser.close()
@@ -177,6 +185,37 @@ class ApplicationEngine:
                         "adapter": resolve_adapter(url).name,
                     },
                 )
+
+    async def _find_apply_link(self, page: Page, current_url: str) -> str | None:
+        """On job-listing pages (RemoteOK, WeWorkRemotely, etc.) find the external
+        apply link and return it so the engine can navigate to the real ATS form."""
+        selectors = [
+            "a[href]:has-text('Apply for this position')",
+            "a[href]:has-text('Apply Now')",
+            "a[href]:has-text('Apply now')",
+            "a[href]:has-text('Apply for Job')",
+            "a.apply-button[href]",
+            "a.apply-now[href]",
+            "a.button.apply[href]",
+            # WeWorkRemotely
+            "a.button[href*='apply']",
+        ]
+        current_domain = urlparse(current_url).netloc.lower()
+        for selector in selectors:
+            try:
+                locator = page.locator(selector).first
+                if await locator.count() and await locator.is_visible(timeout=700):
+                    href = await locator.get_attribute("href")
+                    if not href:
+                        continue
+                    # Only follow if it's an absolute external URL
+                    if href.startswith("http"):
+                        link_domain = urlparse(href).netloc.lower()
+                        if link_domain != current_domain:
+                            return href
+            except Exception:
+                continue
+        return None
 
     async def _detect_captcha(self, page: Page) -> bool:
         selectors = [

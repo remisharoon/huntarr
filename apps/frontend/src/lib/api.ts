@@ -2,6 +2,14 @@ import type { Application, ManualAction, Profile, Run, RunEvent } from '../types
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
 
+type AuthTokenResolver = () => Promise<string | null>
+
+let authTokenResolver: AuthTokenResolver | null = null
+
+export function setApiAuthTokenResolver(resolver: AuthTokenResolver | null): void {
+  authTokenResolver = resolver
+}
+
 export type LLMProviderSummary = {
   id: string
   name: string
@@ -19,11 +27,17 @@ export type LLMProviderListResponse = {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const authToken = authTokenResolver ? await authTokenResolver() : null
+  const headers = new Headers(init?.headers ?? {})
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
+  if (authToken && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${authToken}`)
+  }
+
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
+    headers,
     ...init,
   })
   if (!response.ok) {
@@ -50,10 +64,11 @@ export const api = {
     request('/api/runs', { method: 'POST', body: JSON.stringify(body) }),
   pauseRun: (id: string) => request(`/api/runs/${id}/pause`, { method: 'POST' }),
   resumeRun: (id: string) => request(`/api/runs/${id}/resume`, { method: 'POST' }),
-  listJobs: () => request<{ items: any[] }>('/api/jobs'),
+  listJobs: () => request<{ items: any[]; counts?: { total: number; new: number; queued: number; applied: number } }>('/api/jobs'),
   getJob: (id: string) => request(`/api/jobs/${id}`),
   getJobDetail: (id: string) => request(`/api/jobs/${id}`),
   applyNow: (id: string) => request(`/api/jobs/${id}/apply-now`, { method: 'POST' }),
+  deleteJobs: () => request('/api/jobs', { method: 'DELETE' }),
   listApplications: () => request<{ items: any[] }>('/api/applications'),
   getApplicationDetail: (id: string) => request(`/api/applications/${id}`),
   listManualActions: () => request<{ items: any[] }>('/api/manual-actions'),
@@ -92,18 +107,30 @@ export const api = {
     request(`/api/credentials/${domain}/${username}`, { method: 'DELETE' }),
   storeCredential: (body: Record<string, unknown>) =>
     request('/api/credentials', { method: 'POST', body: JSON.stringify(body) }),
+  createSteelSession: (body: Record<string, unknown>) =>
+    request('/api/byok/steel/session', { method: 'POST', body: JSON.stringify(body) }),
   importResume: (file: File): Promise<Partial<Profile>> => {
     const fd = new FormData()
     fd.append('file', file)
-    return fetch(`${API_BASE}/api/profile/import-resume`, { method: 'POST', body: fd }).then(
-      async (r) => {
+    const send = async () => {
+      const authToken = authTokenResolver ? await authTokenResolver() : null
+      const headers = new Headers()
+      if (authToken) {
+        headers.set('Authorization', `Bearer ${authToken}`)
+      }
+      return fetch(`${API_BASE}/api/profile/import-resume`, {
+        method: 'POST',
+        body: fd,
+        headers,
+      })
+    }
+    return send().then(async (r) => {
         if (!r.ok) {
           const text = await r.text()
           throw new Error(text || `HTTP ${r.status}`)
         }
         return r.json()
-      },
-    )
+      })
   },
   profilePhotoUrl: (path: string) =>
     `${API_BASE}/api/profile/photo?path=${encodeURIComponent(path)}`,

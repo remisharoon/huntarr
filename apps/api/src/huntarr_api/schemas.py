@@ -35,9 +35,12 @@ class ProfilePayload(BaseModel):
     links: list[dict[str, Any]] = Field(default_factory=list)
     profile_photo_path: str | None = None
     profile_photo_mime: str | None = None
+    resume_path: str | None = None
     preferences: dict[str, Any] = Field(default_factory=dict)
     rule_config: dict[str, Any] = Field(default_factory=dict)
     natural_language_override: str | None = None
+    desired_job_title: str | None = None
+    desired_location: str | None = None
 
 
 class CredentialPayload(BaseModel):
@@ -114,6 +117,7 @@ class JobDetailResponse(BaseModel):
     raw_json: dict[str, Any]
     score: float | None
     explanation: dict[str, Any] | None
+    status: str | None
     applications: list[dict[str, Any]]
     manual_actions: list[dict[str, Any]]
     generated_documents: list[dict[str, Any]]

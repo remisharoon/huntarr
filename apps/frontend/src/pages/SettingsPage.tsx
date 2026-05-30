@@ -3,6 +3,7 @@ import { Check, Pencil, Plus, Trash2 } from 'lucide-react'
 
 import { api, type LLMProviderSummary } from '../lib/api'
 import { Badge, Button, Card, Input, PageHeader, TextArea } from '../components/ui'
+import type { Profile } from '../types'
 
 const defaultProviderForm = {
   name: '',
@@ -11,12 +12,58 @@ const defaultProviderForm = {
   api_key: '',
 }
 
+type JobSources = {
+  remoteok: boolean
+  weworkremotely: boolean
+  brave_search: boolean
+}
+
+const defaultJobSources: JobSources = {
+  remoteok: true,
+  weworkremotely: true,
+  brave_search: true,
+}
+
+function normalizeJobSources(source: unknown): JobSources {
+  if (!source || typeof source !== 'object') {
+    return { ...defaultJobSources }
+  }
+  const value = source as Record<string, unknown>
+  return {
+    remoteok: Boolean(value.remoteok),
+    weworkremotely: Boolean(value.weworkremotely),
+    brave_search: Boolean(value.brave_search),
+  }
+}
+
+function normalizeProfileForSettings(profile: Profile | null): Profile | null {
+  if (!profile) return null
+  return {
+    ...profile,
+    full_name: profile.full_name || '',
+    email: profile.email || '',
+    years_experience: profile.years_experience ?? 0,
+    summary: profile.summary || '',
+    skills: profile.skills || [],
+    experience: profile.experience || [],
+    education: profile.education || [],
+    awards: profile.awards || [],
+    certifications: profile.certifications || [],
+    projects: profile.projects || [],
+    languages: profile.languages || [],
+    links: profile.links || [],
+    preferences: profile.preferences || {},
+  }
+}
+
 export function SettingsPage() {
   const [config, setConfig] = useState<any>({})
   const [credentials, setCredentials] = useState<any[]>([])
   const [schedules, setSchedules] = useState<any[]>([])
   const [providers, setProviders] = useState<LLMProviderSummary[]>([])
   const [activeProviderId, setActiveProviderId] = useState<string | null>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [jobSources, setJobSources] = useState<JobSources>({ ...defaultJobSources })
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
 
@@ -24,6 +71,10 @@ export function SettingsPage() {
   const [providerForm, setProviderForm] = useState({ ...defaultProviderForm })
   const [newCredential, setNewCredential] = useState({ domain: '', username: '', password: '' })
   const [newSchedule, setNewSchedule] = useState({ name: '', cron_expr: '', timezone: 'UTC', payload: '{}' })
+  const [openRouterApiKey, setOpenRouterApiKey] = useState('')
+  const [openRouterModel, setOpenRouterModel] = useState('openai/gpt-4o-mini')
+  const [steelApiKey, setSteelApiKey] = useState('')
+  const [steelProjectId, setSteelProjectId] = useState('')
 
   const flashMessage = (text: string) => {
     setMessage(text)
@@ -37,17 +88,36 @@ export function SettingsPage() {
 
   const loadData = async () => {
     try {
-      const [configRes, credentialsRes, schedulesRes, providersRes] = await Promise.all([
+      const [configRes, credentialsRes, schedulesRes, providersRes, profileRes] = await Promise.all([
         api.getConfig(),
         api.listCredentials(),
         api.listSchedules(),
         api.listLLMProviders(),
+        api.getProfile(),
       ])
       setConfig((configRes as any).value || {})
       setCredentials(credentialsRes.items || [])
       setSchedules(schedulesRes.items || [])
       setProviders(providersRes.items || [])
       setActiveProviderId(providersRes.active_provider_id ?? null)
+      const normalizedProfile = normalizeProfileForSettings(profileRes)
+      setProfile(normalizedProfile)
+      setJobSources(normalizeJobSources(profileRes.job_sources))
+
+      try {
+        const [openRouterCred, steelCred] = await Promise.all([
+          api.getCredential('openrouter.ai', 'default'),
+          api.getCredential('steel.dev', 'default'),
+        ])
+        setOpenRouterApiKey((openRouterCred as any)?.password || '')
+        setSteelApiKey((steelCred as any)?.password || '')
+      } catch {
+        setOpenRouterApiKey('')
+        setSteelApiKey('')
+      }
+
+      setOpenRouterModel((configRes as any)?.value?.openrouter_model || 'openai/gpt-4o-mini')
+      setSteelProjectId((configRes as any)?.value?.steel_project_id || '')
     } catch (err: any) {
       setMessage(`Error loading settings: ${err.message}`)
     }
@@ -66,6 +136,24 @@ export function SettingsPage() {
       flashMessage('Settings saved successfully')
     } catch (err: any) {
       setMessage(`Error saving settings: ${err.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const updateJobSources = async (sources: JobSources) => {
+    setBusy(true)
+    try {
+      if (!profile) {
+        throw new Error('Profile not loaded yet')
+      }
+      const updatedProfile = { ...profile, job_sources: sources }
+      await api.saveProfile(updatedProfile)
+      setJobSources(sources)
+      setProfile(updatedProfile)
+      flashMessage('Job sources updated successfully')
+    } catch (err: any) {
+      setMessage(`Error updating job sources: ${err.message}`)
     } finally {
       setBusy(false)
     }
@@ -275,6 +363,96 @@ export function SettingsPage() {
     }
   }
 
+  const saveByokKeys = async () => {
+    setBusy(true)
+    try {
+      if (openRouterApiKey.trim()) {
+        await api.storeCredential({
+          domain: 'openrouter.ai',
+          username: 'default',
+          password: openRouterApiKey.trim(),
+          metadata: { provider: 'openrouter', byok: true },
+        })
+      }
+
+      if (steelApiKey.trim()) {
+        await api.storeCredential({
+          domain: 'steel.dev',
+          username: 'default',
+          password: steelApiKey.trim(),
+          metadata: { provider: 'steel', byok: true },
+        })
+      }
+
+      await saveConfig({
+        openrouter_model: openRouterModel.trim() || 'openai/gpt-4o-mini',
+        steel_project_id: steelProjectId.trim(),
+      })
+
+      flashMessage('BYOK settings saved')
+      await loadData()
+    } catch (err: any) {
+      setMessage(`Failed to save BYOK settings: ${err.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const testOpenRouterKey = async () => {
+    if (!openRouterApiKey.trim()) {
+      setMessage('OpenRouter API key is required')
+      return
+    }
+    setBusy(true)
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${openRouterApiKey.trim()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: openRouterModel.trim() || 'openai/gpt-4o-mini',
+          messages: [{ role: 'user', content: 'Reply only with: ok' }],
+          max_tokens: 8,
+          temperature: 0,
+        }),
+      })
+
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || `OpenRouter test failed (${response.status})`)
+      }
+
+      flashMessage('OpenRouter key test succeeded')
+    } catch (err: any) {
+      setMessage(`OpenRouter test failed: ${err.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const testSteelKey = async () => {
+    if (!steelApiKey.trim()) {
+      setMessage('Steel API key is required')
+      return
+    }
+
+    setBusy(true)
+    try {
+      const result = await api.createSteelSession({
+        api_key: steelApiKey.trim(),
+        project_id: steelProjectId.trim() || undefined,
+        metadata: { source: 'huntarr-settings-test' },
+      })
+      flashMessage((result as any).message || 'Steel key test succeeded')
+    } catch (err: any) {
+      setMessage(`Steel test failed: ${err.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -284,6 +462,62 @@ export function SettingsPage() {
       />
 
       {message ? <Card variant="muted" className="border-accent/50 text-accent">{message}</Card> : null}
+
+      <Card className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-xl text-text">BYOK Providers</h2>
+          <Badge tone="info">OpenRouter + Steel.dev</Badge>
+        </div>
+        <div className="space-y-1 text-xs text-muted">
+          <p>Bring your own keys. Huntarr does not ship with shared API keys.</p>
+          <p>OpenRouter key is used directly from the browser for AI tasks.</p>
+          <p>Steel key is used only when creating automation sessions.</p>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-2 rounded-xl border border-border bg-elevated/50 p-3">
+            <p className="text-sm font-semibold text-text">OpenRouter (BYOK)</p>
+            <Input
+              type="password"
+              placeholder="OpenRouter API key"
+              value={openRouterApiKey}
+              onChange={(event) => setOpenRouterApiKey(event.target.value)}
+            />
+            <Input
+              placeholder="Model (e.g. openai/gpt-4o-mini)"
+              value={openRouterModel}
+              onChange={(event) => setOpenRouterModel(event.target.value)}
+            />
+            <Button type="button" variant="secondary" className="h-8 px-2 text-xs" onClick={testOpenRouterKey}>
+              Test OpenRouter Key
+            </Button>
+          </div>
+
+          <div className="space-y-2 rounded-xl border border-border bg-elevated/50 p-3">
+            <p className="text-sm font-semibold text-text">Steel.dev (BYOK)</p>
+            <Input
+              type="password"
+              placeholder="Steel API key"
+              value={steelApiKey}
+              onChange={(event) => setSteelApiKey(event.target.value)}
+            />
+            <Input
+              placeholder="Steel project ID (optional)"
+              value={steelProjectId}
+              onChange={(event) => setSteelProjectId(event.target.value)}
+            />
+            <Button type="button" variant="secondary" className="h-8 px-2 text-xs" onClick={testSteelKey}>
+              Test Steel Key
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <Button type="button" disabled={busy} onClick={saveByokKeys} className="h-8 px-3 text-xs">
+            Save BYOK Settings
+          </Button>
+        </div>
+      </Card>
 
       <Card className="space-y-4">
         <div className="flex items-center justify-between">
@@ -412,6 +646,61 @@ export function SettingsPage() {
             ) : null}
           </div>
         </form>
+      </Card>
+
+      <Card className="space-y-4">
+        <h2 className="font-display text-xl text-text">Job Sources</h2>
+        <p className="text-sm text-muted">Select which job sources to query when starting hunts. All sources run in parallel.</p>
+
+        <div className="space-y-2">
+          <label className="flex items-center justify-between rounded-xl border border-border bg-elevated/50 px-3 py-2">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={jobSources.remoteok}
+                onChange={(event) => updateJobSources({ ...jobSources, remoteok: event.target.checked })}
+                disabled={busy}
+              />
+              <div>
+                <p className="text-sm font-semibold text-text">RemoteOK</p>
+                <p className="text-xs text-muted">remoteok.com API - remote-focused jobs</p>
+              </div>
+            </div>
+            <Badge tone="success">Ready</Badge>
+          </label>
+
+          <label className="flex items-center justify-between rounded-xl border border-border bg-elevated/50 px-3 py-2">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={jobSources.weworkremotely}
+                onChange={(event) => updateJobSources({ ...jobSources, weworkremotely: event.target.checked })}
+                disabled={busy}
+              />
+              <div>
+                <p className="text-sm font-semibold text-text">WeWorkRemotely</p>
+                <p className="text-xs text-muted">weworkremotely.com - RSS feed scraping</p>
+              </div>
+            </div>
+            <Badge tone="success">Ready</Badge>
+          </label>
+
+          <label className="flex items-center justify-between rounded-xl border border-border bg-elevated/50 px-3 py-2">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={jobSources.brave_search}
+                onChange={(event) => updateJobSources({ ...jobSources, brave_search: event.target.checked })}
+                disabled={busy}
+              />
+              <div>
+                <p className="text-sm font-semibold text-text">Brave Search</p>
+                <p className="text-xs text-muted">ATS domains (Greenhouse, Lever, Workday)</p>
+              </div>
+            </div>
+            <Badge tone="warning">Check API key</Badge>
+          </label>
+        </div>
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">

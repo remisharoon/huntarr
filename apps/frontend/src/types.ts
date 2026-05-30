@@ -43,6 +43,7 @@ export interface SearchConfig {
   aggressive_scraping?: boolean
   max_jobs_per_run?: number
   target_job_id?: string | null
+  sources?: string[]
 }
 
 export interface RunEvent {
@@ -144,7 +145,11 @@ export interface Profile {
   links: ProfileLink[]
   profile_photo_path?: string | null
   profile_photo_mime?: string | null
+  resume_path?: string | null
   preferences: Record<string, unknown>
   rule_config?: Record<string, unknown>
   natural_language_override?: string | null
+  desired_job_title?: string | null
+  desired_location?: string | null
+  job_sources?: Record<string, boolean>
 }

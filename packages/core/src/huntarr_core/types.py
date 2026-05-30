@@ -18,6 +18,10 @@ class SearchConfig(BaseModel):
     aggressive_scraping: bool = True
     max_jobs_per_run: int = 50
     target_job_id: str | None = None
+    sources: list[str] = Field(
+        default_factory=lambda: ["remoteok", "weworkremotely", "brave_search"],
+        description="List of job sources to query"
+    )
 
 
 class JobPosting(BaseModel):

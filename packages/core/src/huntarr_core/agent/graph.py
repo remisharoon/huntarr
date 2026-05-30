@@ -144,10 +144,28 @@ class HuntGraphRunner:
         prefs = await self.repo.get_search_preferences(profile["id"])
 
         search_config = state.get("search_config") or {}
+        
         if prefs:
             search_config = {**prefs.get("rule_config", {}), **search_config}
             if prefs.get("natural_language_override") and not search_config.get("natural_language_override"):
                 search_config["natural_language_override"] = prefs["natural_language_override"]
+        
+        if not search_config.get("role_keywords") and profile.get("desired_job_title"):
+            title = profile["desired_job_title"]
+            title_parts = [p.strip().lower() for p in title.split() if p.strip().lower() not in ["senior", "junior", "lead", "principal"]]
+            search_config["role_keywords"] = title_parts if title_parts else [title.lower()]
+        
+        if not search_config.get("locations") and profile.get("desired_location"):
+            desired_loc = profile["desired_location"]
+            if "remote" in desired_loc.lower():
+                search_config["locations"] = ["Remote"]
+            else:
+                loc_parts = [p.strip().lower() for p in desired_loc.split(",") if p.strip()]
+                if len(loc_parts) > 1:
+                    loc_parts = loc_parts[:1]
+                # Always include "gcc" (for GCC-region physical jobs) and "remote"
+                # (since most job sources like RemoteOK/WeWorkRemotely only list remote jobs)
+                search_config["locations"] = loc_parts + ["gcc", "remote"]
 
         state["profile_id"] = str(profile["id"])
         state["search_config"] = search_config
@@ -287,14 +305,26 @@ class HuntGraphRunner:
             run_id,
             UUID(str(current_job["id"])),
         )
-        write_resume_pdf(profile, current_job, resume_path)
+        
+        # Check if user has uploaded a resume
+        uploaded_resume_path = str(profile.get("resume_path") or "").strip()
+        if uploaded_resume_path and Path(uploaded_resume_path).exists():
+            # Use uploaded resume
+            state["generated_docs"] = {
+                "resume_pdf": uploaded_resume_path,
+                "cover_letter_txt": str(cover_path),
+            }
+        else:
+            # Generate new resume
+            write_resume_pdf(profile, current_job, resume_path)
+            state["generated_docs"] = {
+                "resume_pdf": str(resume_path),
+                "cover_letter_txt": str(cover_path),
+            }
+        
         cover_text = build_cover_letter_text(profile, current_job)
         write_text_document(cover_text, cover_path)
 
-        state["generated_docs"] = {
-            "resume_pdf": str(resume_path),
-            "cover_letter_txt": str(cover_path),
-        }
         profile_photo_path = str(profile.get("profile_photo_path") or "").strip()
         if profile_photo_path and Path(profile_photo_path).exists():
             state["generated_docs"]["profile_photo"] = profile_photo_path
@@ -303,8 +333,8 @@ class HuntGraphRunner:
             run_id,
             UUID(str(current_job["id"])),
             "resume_pdf",
-            str(resume_path),
-            {"tailored": True},
+            state["generated_docs"]["resume_pdf"],
+            {"tailored": True, "uploaded": bool(uploaded_resume_path and Path(uploaded_resume_path).exists())},
         )
         await self.repo.create_generated_document(
             run_id,
