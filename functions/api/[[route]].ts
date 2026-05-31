@@ -719,6 +719,494 @@ async function requestText(url: string, init?: RequestInit, timeoutMs = 12000): 
   }
 }
 
+function decodePdfLiteralString(literal: string): string {
+  let output = ''
+  for (let index = 0; index < literal.length; index += 1) {
+    const char = literal[index]
+    if (char !== '\\') {
+      output += char
+      continue
+    }
+
+    const next = literal[index + 1]
+    if (!next) {
+      break
+    }
+
+    if (next >= '0' && next <= '7') {
+      let octal = next
+      let offset = 2
+      while (offset <= 3) {
+        const candidate = literal[index + offset]
+        if (!candidate || candidate < '0' || candidate > '7') break
+        octal += candidate
+        offset += 1
+      }
+      output += String.fromCharCode(Number.parseInt(octal, 8))
+      index += octal.length
+      continue
+    }
+
+    switch (next) {
+      case 'n':
+        output += '\n'
+        break
+      case 'r':
+        output += '\r'
+        break
+      case 't':
+        output += '\t'
+        break
+      case 'b':
+        output += '\b'
+        break
+      case 'f':
+        output += '\f'
+        break
+      case '(':
+      case ')':
+      case '\\':
+        output += next
+        break
+      case '\n':
+        break
+      case '\r':
+        if (literal[index + 2] === '\n') {
+          index += 1
+        }
+        break
+      default:
+        output += next
+        break
+    }
+
+    index += 1
+  }
+  return output
+}
+
+function cleanupExtractedPdfLine(value: string): string {
+  const compact = value.replace(/[\u0000-\u001F]+/g, ' ').replace(/\s+/g, ' ').trim()
+  if (compact.length < 2) return ''
+  if (/^[^A-Za-z0-9]+$/.test(compact)) return ''
+  return compact
+}
+
+function extractPdfStringsFromSource(source: string): string[] {
+  const results: string[] = []
+  const seen = new Set<string>()
+  const literalRegex = /\((?:\\.|[^\\()]){2,}\)/g
+
+  for (const match of source.matchAll(literalRegex)) {
+    const raw = match[0]
+    const decoded = cleanupExtractedPdfLine(decodePdfLiteralString(raw.slice(1, -1)))
+    if (!decoded) continue
+    const key = decoded.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    results.push(decoded)
+    if (results.length >= 2500) {
+      break
+    }
+  }
+
+  return results
+}
+
+async function inflatePdfStreamChunk(stream: Uint8Array): Promise<string | null> {
+  if (typeof DecompressionStream === 'undefined') return null
+  if (!stream.length) return null
+
+  try {
+    const decompressed = new Response(new Blob([stream]).stream().pipeThrough(new DecompressionStream('deflate')))
+    return await decompressed.text()
+  } catch {
+    return null
+  }
+}
+
+async function extractFlateDecodedPdfStrings(bytes: Uint8Array): Promise<string[]> {
+  const source = new TextDecoder('latin1').decode(bytes)
+  const chunks: string[] = []
+  let cursor = 0
+
+  while (cursor < source.length) {
+    const streamIndex = source.indexOf('stream', cursor)
+    if (streamIndex === -1) break
+    const endstreamIndex = source.indexOf('endstream', streamIndex + 6)
+    if (endstreamIndex === -1) break
+
+    const header = source.slice(Math.max(0, streamIndex - 300), streamIndex)
+    cursor = endstreamIndex + 'endstream'.length
+
+    if (!/\/FlateDecode/.test(header)) {
+      continue
+    }
+
+    let dataStart = streamIndex + 'stream'.length
+    if (source[dataStart] === '\r' && source[dataStart + 1] === '\n') {
+      dataStart += 2
+    } else if (source[dataStart] === '\n' || source[dataStart] === '\r') {
+      dataStart += 1
+    }
+
+    if (dataStart >= endstreamIndex) {
+      continue
+    }
+
+    const rawChunk = bytes.slice(dataStart, endstreamIndex)
+    const inflated = await inflatePdfStreamChunk(rawChunk)
+    if (!inflated) {
+      continue
+    }
+
+    chunks.push(...extractPdfStringsFromSource(inflated))
+    if (chunks.length >= 4000) {
+      break
+    }
+  }
+
+  return chunks
+}
+
+async function extractResumeTextFromPdf(input: File): Promise<string> {
+  const bytes = new Uint8Array(await input.arrayBuffer())
+  const directSource = new TextDecoder('latin1').decode(bytes)
+  const directStrings = extractPdfStringsFromSource(directSource)
+  const inflatedStrings = await extractFlateDecodedPdfStrings(bytes)
+  const allStrings = [...directStrings, ...inflatedStrings]
+
+  const unique: string[] = []
+  const seen = new Set<string>()
+  for (const line of allStrings) {
+    const normalized = cleanupExtractedPdfLine(line)
+    if (!normalized) continue
+    const key = normalized.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push(normalized)
+    if (unique.length >= 3500) {
+      break
+    }
+  }
+
+  return unique.join('\n').slice(0, 50000)
+}
+
+function extractJsonObjectFromModelOutput(content: string): JsonObject {
+  const trimmed = content.trim()
+  if (!trimmed) {
+    throw new Error('AI response did not include content')
+  }
+
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  const candidate = fencedMatch ? fencedMatch[1].trim() : trimmed
+
+  const parse = (value: string): JsonObject | null => {
+    try {
+      const parsed = JSON.parse(value)
+      return asObject(parsed)
+    } catch {
+      return null
+    }
+  }
+
+  const direct = parse(candidate)
+  if (direct && Object.keys(direct).length) {
+    return direct
+  }
+
+  const firstBrace = candidate.indexOf('{')
+  const lastBrace = candidate.lastIndexOf('}')
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const sliced = parse(candidate.slice(firstBrace, lastBrace + 1))
+    if (sliced && Object.keys(sliced).length) {
+      return sliced
+    }
+  }
+
+  throw new Error('AI response was not valid JSON')
+}
+
+function sanitizeString(value: unknown, maxLen = 600): string {
+  return asString(value).replace(/\s+/g, ' ').trim().slice(0, maxLen)
+}
+
+function sanitizeStringList(value: unknown, maxItems = 40, maxLen = 80): string[] {
+  const entries = Array.isArray(value)
+    ? value
+    : sanitizeString(value, 2000)
+        .split(/[\n,]/)
+        .map((item) => item.trim())
+
+  const seen = new Set<string>()
+  const output: string[] = []
+
+  for (const entry of entries) {
+    const normalized = sanitizeString(entry, maxLen)
+    if (!normalized) continue
+    const key = normalized.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    output.push(normalized)
+    if (output.length >= maxItems) {
+      break
+    }
+  }
+
+  return output
+}
+
+function sanitizeProfileObjectArray(
+  value: unknown,
+  fields: Array<{ key: string; maxLen?: number }>,
+  maxItems = 20,
+): JsonObject[] {
+  if (!Array.isArray(value)) return []
+  const output: JsonObject[] = []
+
+  for (const rawItem of value) {
+    const item = asObject(rawItem)
+    const next: JsonObject = {}
+    for (const field of fields) {
+      const fieldValue = sanitizeString(item[field.key], field.maxLen ?? 240)
+      if (fieldValue) {
+        next[field.key] = fieldValue
+      }
+    }
+
+    if (Object.keys(next).length) {
+      output.push(next)
+    }
+    if (output.length >= maxItems) {
+      break
+    }
+  }
+
+  return output
+}
+
+function sanitizeExtractedProfile(payload: JsonObject): Partial<ProfileRecord> {
+  const result: Partial<ProfileRecord> = {}
+
+  const fullName = sanitizeString(payload.full_name)
+  if (fullName) result.full_name = fullName
+
+  const email = sanitizeString(payload.email, 320)
+  if (email) result.email = email
+
+  const phone = sanitizeString(payload.phone, 80)
+  if (phone) result.phone = phone
+
+  const location = sanitizeString(payload.location, 180)
+  if (location) result.location = location
+
+  const summary = sanitizeString(payload.summary, 2400)
+  if (summary) result.summary = summary
+
+  const yearsExperience = Number.parseInt(asString(payload.years_experience), 10)
+  if (Number.isFinite(yearsExperience) && yearsExperience >= 0) {
+    result.years_experience = Math.min(50, yearsExperience)
+  }
+
+  const skills = sanitizeStringList(payload.skills, 50, 80)
+  if (skills.length) result.skills = skills
+
+  const experience = sanitizeProfileObjectArray(
+    payload.experience,
+    [
+      { key: 'title', maxLen: 160 },
+      { key: 'company', maxLen: 160 },
+      { key: 'start', maxLen: 40 },
+      { key: 'end', maxLen: 40 },
+      { key: 'description', maxLen: 1200 },
+    ],
+    20,
+  )
+  if (experience.length) result.experience = experience
+
+  const education = sanitizeProfileObjectArray(
+    payload.education,
+    [
+      { key: 'degree', maxLen: 180 },
+      { key: 'institution', maxLen: 180 },
+      { key: 'year', maxLen: 40 },
+      { key: 'description', maxLen: 800 },
+    ],
+    12,
+  )
+  if (education.length) result.education = education
+
+  const awards = sanitizeProfileObjectArray(
+    payload.awards,
+    [
+      { key: 'title', maxLen: 180 },
+      { key: 'issuer', maxLen: 180 },
+      { key: 'year', maxLen: 40 },
+      { key: 'description', maxLen: 800 },
+    ],
+    15,
+  )
+  if (awards.length) result.awards = awards
+
+  const certifications = sanitizeProfileObjectArray(
+    payload.certifications,
+    [
+      { key: 'name', maxLen: 180 },
+      { key: 'issuer', maxLen: 180 },
+      { key: 'year', maxLen: 40 },
+      { key: 'credential_id', maxLen: 160 },
+      { key: 'url', maxLen: 320 },
+    ],
+    20,
+  )
+  if (certifications.length) result.certifications = certifications
+
+  const projectsRaw = sanitizeProfileObjectArray(
+    payload.projects,
+    [
+      { key: 'name', maxLen: 180 },
+      { key: 'role', maxLen: 180 },
+      { key: 'start', maxLen: 40 },
+      { key: 'end', maxLen: 40 },
+      { key: 'description', maxLen: 1200 },
+      { key: 'url', maxLen: 320 },
+    ],
+    20,
+  )
+  if (projectsRaw.length) {
+    const sourceProjects = Array.isArray(payload.projects) ? payload.projects : []
+    result.projects = projectsRaw.map((project, index) => {
+      const sourceProject = asObject(sourceProjects[index])
+      const techStack = sanitizeStringList(sourceProject.tech_stack, 20, 60)
+      return {
+        ...project,
+        tech_stack: techStack,
+      }
+    })
+  }
+
+  const languagesRaw = sanitizeProfileObjectArray(
+    payload.languages,
+    [
+      { key: 'name', maxLen: 80 },
+      { key: 'proficiency', maxLen: 80 },
+    ],
+    20,
+  )
+  if (languagesRaw.length) result.languages = languagesRaw
+
+  const linksRaw = sanitizeProfileObjectArray(
+    payload.links,
+    [
+      { key: 'label', maxLen: 80 },
+      { key: 'url', maxLen: 320 },
+    ],
+    20,
+  )
+  if (linksRaw.length) result.links = linksRaw
+
+  return result
+}
+
+function mergeExtractedProfile(current: JsonObject, extracted: Partial<ProfileRecord>, resumePath: string): ProfileRecord {
+  const next: ProfileRecord = {
+    ...defaultProfile,
+    ...current,
+    resume_path: resumePath,
+  }
+
+  const singleFields: Array<keyof Pick<ProfileRecord, 'full_name' | 'email' | 'phone' | 'location' | 'summary'>> = [
+    'full_name',
+    'email',
+    'phone',
+    'location',
+    'summary',
+  ]
+
+  for (const field of singleFields) {
+    const value = sanitizeString(extracted[field])
+    if (value) {
+      ;(next as any)[field] = value
+    }
+  }
+
+  if (typeof extracted.years_experience === 'number' && Number.isFinite(extracted.years_experience)) {
+    next.years_experience = Math.max(0, Math.min(50, Math.floor(extracted.years_experience)))
+  }
+
+  const listFields: Array<keyof Pick<ProfileRecord, 'skills' | 'experience' | 'education' | 'awards' | 'certifications' | 'projects' | 'languages' | 'links'>> = [
+    'skills',
+    'experience',
+    'education',
+    'awards',
+    'certifications',
+    'projects',
+    'languages',
+    'links',
+  ]
+
+  for (const field of listFields) {
+    const value = extracted[field]
+    if (Array.isArray(value) && value.length) {
+      ;(next as any)[field] = value
+    }
+  }
+
+  return next
+}
+
+async function extractProfileWithOpenRouter(apiKey: string, model: string, resumeText: string): Promise<Partial<ProfileRecord>> {
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0,
+      max_tokens: 1800,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You extract profile data from resumes. Return only valid JSON with keys: full_name, email, phone, location, years_experience, summary, skills, experience, education, awards, certifications, projects, languages, links. Use empty arrays for missing list sections and omit unknown scalar fields.',
+        },
+        {
+          role: 'user',
+          content: `Extract a structured profile from this resume text:\n\n${resumeText.slice(0, 32000)}`,
+        },
+      ],
+    }),
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(text || `OpenRouter extraction failed (${response.status})`)
+  }
+
+  const payload = asObject(await response.json())
+  const choices = Array.isArray(payload.choices) ? payload.choices : []
+  const firstChoice = asObject(choices[0])
+  const message = asObject(firstChoice.message)
+  const content = message.content
+
+  let output = ''
+  if (typeof content === 'string') {
+    output = content
+  } else if (Array.isArray(content)) {
+    output = content
+      .map((part) => (typeof part === 'string' ? part : sanitizeString(asObject(part).text, 4000)))
+      .filter(Boolean)
+      .join('\n')
+  }
+
+  const parsed = extractJsonObjectFromModelOutput(output)
+  return sanitizeExtractedProfile(parsed)
+}
+
 async function readCredential(storage: Storage, userId: string, domain: string, username = 'default'): Promise<CredentialRecord | null> {
   const value = asObject(await storage.get(userCredentialKey(userId, domain, username)))
   const password = asString(value.password).trim()
@@ -1414,27 +1902,51 @@ app.post('/api/profile/import-resume', async (c) => {
     throw new HTTPException(400, { message: 'file is required' })
   }
 
-  const filename = input.name || 'resume'
-  const inferredName = filename
-    .replace(/\.[a-z0-9]+$/i, '')
-    .replace(/[\-_]+/g, ' ')
-    .trim()
-
-  const extracted: Partial<ProfileRecord> = {
-    full_name: inferredName || defaultProfile.full_name,
-    summary: inferredName ? `Imported from resume: ${filename}` : defaultProfile.summary,
-    resume_path: `uploads/${createId('resume')}-${filename}`,
+  if (!/\.pdf$/i.test(input.name)) {
+    throw new HTTPException(400, { message: 'Only PDF files are supported for AI profile extraction' })
   }
 
+  const filename = input.name || 'resume'
   const storage = storageFor(c)
-  const current = asObject(await storage.get(userConfigKey(userId, 'profile')))
-  await storage.put(userConfigKey(userId, 'profile'), {
-    ...defaultProfile,
-    ...current,
-    ...extracted,
-  })
+  const config = asObject(await storage.get(userConfigKey(userId, 'default')))
+  const openRouterModel = asString(config.openrouter_model).trim() || 'openrouter/free'
+  const openRouterCred = await readCredential(storage, userId, 'openrouter.ai')
+  const openRouterApiKey = asString(openRouterCred?.password).trim()
 
-  return c.json(extracted)
+  if (!openRouterApiKey) {
+    throw new HTTPException(400, { message: 'OpenRouter API key is not configured. Add it in Settings > Provider Keys.' })
+  }
+
+  const resumeText = await extractResumeTextFromPdf(input)
+  if (!resumeText || resumeText.length < 80) {
+    throw new HTTPException(400, {
+      message: 'Could not extract readable text from this PDF. Try a text-based PDF export.',
+    })
+  }
+
+  let extracted: Partial<ProfileRecord>
+  try {
+    extracted = await extractProfileWithOpenRouter(openRouterApiKey, openRouterModel, resumeText)
+  } catch (error) {
+    throw new HTTPException(502, {
+      message: `AI profile extraction failed: ${compactMessage(error instanceof Error ? error.message : 'unknown error', 220)}`,
+    })
+  }
+
+  if (!Object.keys(extracted).length) {
+    throw new HTTPException(502, { message: 'AI profile extraction returned no usable fields' })
+  }
+
+  const resumePath = `uploads/${createId('resume')}-${filename}`
+
+  const current = asObject(await storage.get(userConfigKey(userId, 'profile')))
+  const next = mergeExtractedProfile(current, extracted, resumePath)
+  await storage.put(userConfigKey(userId, 'profile'), next)
+
+  return c.json({
+    ...extracted,
+    resume_path: resumePath,
+  })
 })
 
 app.get('/api/profile/photo', (c) => {

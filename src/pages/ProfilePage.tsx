@@ -249,7 +249,7 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
 
       <Card className="space-y-3">
         <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Resume Intelligence</h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400">Upload a PDF resume to auto-populate your profile, extract profile photo, and regenerate a professional summary.</p>
+        <p className="text-sm text-gray-600 dark:text-gray-400">Upload a PDF resume to auto-populate your profile fields and regenerate a professional summary with AI.</p>
         <input
           ref={fileInputRef}
           type="file"
