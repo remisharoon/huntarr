@@ -36,7 +36,7 @@ Fix:
 
 Checks:
 - BYOK key is valid and active.
-- Model name is correct (for example `openai/gpt-4o-mini`).
+- Model name is correct (for example `openrouter/free`).
 - Browser network allows outbound requests to OpenRouter.
 
 ## Steel.dev Test Fails

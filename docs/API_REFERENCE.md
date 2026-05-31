@@ -47,7 +47,7 @@ All endpoints are under `/api`.
 ```json
 {
   "value": {
-    "openrouter_model": "openai/gpt-4o-mini"
+    "openrouter_model": "openrouter/free"
   }
 }
 ```

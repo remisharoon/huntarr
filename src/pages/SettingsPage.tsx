@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { Check, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Check, ExternalLink, Pencil, Plus, Trash2 } from 'lucide-react'
 
 import { api, formatApiError, type LLMProviderSummary } from '../lib/api'
 import { Badge, Button, Card, Input, PageHeader, TextArea } from '../components/ui'
@@ -151,7 +151,7 @@ export function SettingsPage() {
   const [newCredential, setNewCredential] = useState({ domain: '', username: '', password: '' })
   const [newSchedule, setNewSchedule] = useState({ name: '', cron_expr: '', timezone: 'UTC', payload: '{}' })
   const [openRouterApiKey, setOpenRouterApiKey] = useState('')
-  const [openRouterModel, setOpenRouterModel] = useState('openai/gpt-4o-mini')
+  const [openRouterModel, setOpenRouterModel] = useState('openrouter/free')
   const [steelApiKey, setSteelApiKey] = useState('')
   const [steelProjectId, setSteelProjectId] = useState('')
   const [adzunaAppId, setAdzunaAppId] = useState('')
@@ -212,7 +212,7 @@ export function SettingsPage() {
       setUsajobsApiKey(usajobsCred?.password || '')
       setUsajobsUserAgent(usajobsCred?.metadata?.user_agent || '')
 
-      setOpenRouterModel((configRes as any)?.value?.openrouter_model || 'openai/gpt-4o-mini')
+      setOpenRouterModel((configRes as any)?.value?.openrouter_model || 'openrouter/free')
       setSteelProjectId((configRes as any)?.value?.steel_project_id || '')
     } catch (error) {
       showErrorMessage(formatApiError(error, 'Error loading settings'))
@@ -505,7 +505,7 @@ export function SettingsPage() {
       }
 
       await saveConfig({
-        openrouter_model: openRouterModel.trim() || 'openai/gpt-4o-mini',
+        openrouter_model: openRouterModel.trim() || 'openrouter/free',
         steel_project_id: steelProjectId.trim(),
       })
 
@@ -532,7 +532,7 @@ export function SettingsPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: openRouterModel.trim() || 'openai/gpt-4o-mini',
+          model: openRouterModel.trim() || 'openrouter/free',
           messages: [{ role: 'user', content: 'Reply only with: ok' }],
           max_tokens: 8,
           temperature: 0,
@@ -607,7 +607,16 @@ export function SettingsPage() {
 
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">OpenRouter (BYOK)</p>
+            <a
+              href="https://openrouter.ai/keys"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Create OpenRouter API keys (opens in new tab)"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-gray-900 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-gray-100 dark:focus-visible:ring-offset-gray-950"
+            >
+              OpenRouter (BYOK)
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            </a>
             <Input
               type="password"
               placeholder="OpenRouter API key"
@@ -615,7 +624,7 @@ export function SettingsPage() {
               onChange={(event) => setOpenRouterApiKey(event.target.value)}
             />
             <Input
-              placeholder="Model (e.g. openai/gpt-4o-mini)"
+              placeholder="Model (e.g. openrouter/free)"
               value={openRouterModel}
               onChange={(event) => setOpenRouterModel(event.target.value)}
             />
@@ -625,7 +634,16 @@ export function SettingsPage() {
           </div>
 
           <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Steel.dev (BYOK)</p>
+            <a
+              href="https://app.steel.dev/"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Create Steel API keys (opens in new tab)"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-gray-900 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-gray-100 dark:focus-visible:ring-offset-gray-950"
+            >
+              Steel.dev (BYOK)
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            </a>
             <Input
               type="password"
               placeholder="Steel API key"
@@ -684,7 +702,7 @@ export function SettingsPage() {
 
       <Card className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">LLM Providers (OpenAI-compatible)</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">OpenRouter (BYOK)</h2>
           <Badge tone="info">{providers.length}</Badge>
         </div>
 
