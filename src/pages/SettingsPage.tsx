@@ -1,16 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { Check, ExternalLink, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ExternalLink, Plus, Trash2 } from 'lucide-react'
 
-import { api, formatApiError, type LLMProviderSummary } from '../lib/api'
+import { api, formatApiError } from '../lib/api'
 import { Badge, Button, Card, Input, PageHeader, TextArea } from '../components/ui'
 import type { Profile } from '../types'
-
-const defaultProviderForm = {
-  name: '',
-  base_url: 'https://api.openai.com/v1',
-  model: 'gpt-4o-mini',
-  api_key: '',
-}
 
 type JobSources = Record<string, boolean>
 
@@ -138,16 +131,12 @@ export function SettingsPage() {
   const [config, setConfig] = useState<any>({})
   const [credentials, setCredentials] = useState<any[]>([])
   const [schedules, setSchedules] = useState<any[]>([])
-  const [providers, setProviders] = useState<LLMProviderSummary[]>([])
-  const [activeProviderId, setActiveProviderId] = useState<string | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [jobSources, setJobSources] = useState<JobSources>({ ...defaultJobSources })
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [messageTone, setMessageTone] = useState<MessageTone>('info')
 
-  const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
-  const [providerForm, setProviderForm] = useState({ ...defaultProviderForm })
   const [newCredential, setNewCredential] = useState({ domain: '', username: '', password: '' })
   const [newSchedule, setNewSchedule] = useState({ name: '', cron_expr: '', timezone: 'UTC', payload: '{}' })
   const [openRouterApiKey, setOpenRouterApiKey] = useState('')
@@ -170,25 +159,17 @@ export function SettingsPage() {
     setMessage(text)
   }
 
-  const resetProviderForm = () => {
-    setEditingProviderId(null)
-    setProviderForm({ ...defaultProviderForm })
-  }
-
   const loadData = async () => {
     try {
-      const [configRes, credentialsRes, schedulesRes, providersRes, profileRes] = await Promise.all([
+      const [configRes, credentialsRes, schedulesRes, profileRes] = await Promise.all([
         api.getConfig(),
         api.listCredentials(),
         api.listSchedules(),
-        api.listLLMProviders(),
         api.getProfile(),
       ])
       setConfig((configRes as any).value || {})
       setCredentials(credentialsRes.items || [])
       setSchedules(schedulesRes.items || [])
-      setProviders(providersRes.items || [])
-      setActiveProviderId(providersRes.active_provider_id ?? null)
       const normalizedProfile = normalizeProfileForSettings(profileRes)
       setProfile(normalizedProfile)
       setJobSources(normalizeJobSources(profileRes.job_sources))
@@ -250,132 +231,6 @@ export function SettingsPage() {
       flashMessage('Job sources updated successfully')
     } catch (err: any) {
       showErrorMessage(formatApiError(err, 'Error updating job sources'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const beginEditProvider = (provider: LLMProviderSummary) => {
-    setEditingProviderId(provider.id)
-    setProviderForm({
-      name: provider.name,
-      base_url: provider.base_url,
-      model: provider.model,
-      api_key: '',
-    })
-  }
-
-  const saveProvider = async (event: FormEvent) => {
-    event.preventDefault()
-    const name = providerForm.name.trim()
-    const baseUrl = providerForm.base_url.trim()
-    const model = providerForm.model.trim()
-    const apiKey = providerForm.api_key.trim()
-    if (!name || !baseUrl || !model) {
-      showErrorMessage('Provider name, base URL, and model are required')
-      return
-    }
-
-    const payload: Record<string, unknown> = {
-      name,
-      base_url: baseUrl,
-      model,
-    }
-    if (apiKey) {
-      payload.api_key = apiKey
-    }
-
-    setBusy(true)
-    try {
-      if (editingProviderId) {
-        await api.updateLLMProvider(editingProviderId, payload)
-        flashMessage('Provider updated successfully')
-      } else {
-        await api.createLLMProvider(payload)
-        flashMessage('Provider created successfully')
-      }
-      resetProviderForm()
-      await loadData()
-    } catch (error) {
-      showErrorMessage(formatApiError(error, 'Error saving provider'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const testProviderFromForm = async () => {
-    const name = providerForm.name.trim()
-    const baseUrl = providerForm.base_url.trim()
-    const model = providerForm.model.trim()
-    const apiKey = providerForm.api_key.trim()
-    if (!name || !baseUrl || !model) {
-      showErrorMessage('Provider name, base URL, and model are required for test')
-      return
-    }
-    if (!editingProviderId && !apiKey) {
-      showErrorMessage('API key is required to test an unsaved provider')
-      return
-    }
-
-    const payload: Record<string, unknown> = {
-      base_url: baseUrl,
-      model,
-    }
-    if (editingProviderId) {
-      payload.provider_id = editingProviderId
-    }
-    if (apiKey) {
-      payload.api_key = apiKey
-    }
-
-    setBusy(true)
-    try {
-      const result = await api.testLLMProvider(payload)
-      flashMessage((result as any).message || 'Provider test succeeded')
-    } catch (error) {
-      showErrorMessage(formatApiError(error, 'Provider test failed'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const testProviderById = async (providerId: string) => {
-    setBusy(true)
-    try {
-      const result = await api.testLLMProvider({ provider_id: providerId })
-      flashMessage((result as any).message || 'Provider test succeeded')
-    } catch (error) {
-      showErrorMessage(formatApiError(error, 'Provider test failed'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const activateProvider = async (providerId: string) => {
-    setBusy(true)
-    try {
-      await api.activateLLMProvider(providerId)
-      await loadData()
-      flashMessage('Active provider updated')
-    } catch (error) {
-      showErrorMessage(formatApiError(error, 'Error setting active provider'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const removeProvider = async (provider: LLMProviderSummary) => {
-    if (!window.confirm(`Delete LLM provider "${provider.name}"?`)) return
-    setBusy(true)
-    try {
-      await api.deleteLLMProvider(provider.id)
-      if (editingProviderId === provider.id) {
-        resetProviderForm()
-      }
-      await loadData()
-      flashMessage('Provider deleted successfully')
-    } catch (error) {
-      showErrorMessage(formatApiError(error, 'Error deleting provider'))
     } finally {
       setBusy(false)
     }
@@ -577,7 +432,7 @@ export function SettingsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Settings"
-        subtitle="Configure LLM providers, ATS credentials, behavior flags, and scheduling."
+        subtitle="Configure BYOK keys, ATS credentials, behavior flags, and scheduling."
         actions={<Badge tone={busy ? 'warning' : 'success'}>{busy ? 'Processing' : 'Ready'}</Badge>}
       />
 
@@ -701,135 +556,6 @@ export function SettingsPage() {
       </Card>
 
       <Card className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">OpenRouter (BYOK)</h2>
-          <Badge tone="info">{providers.length}</Badge>
-        </div>
-
-        <div className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
-          <p>Active provider is used for resume parsing and AI-powered features.</p>
-          <p>Endpoint must support OpenAI Chat Completions.</p>
-          <p>API keys are encrypted at rest.</p>
-        </div>
-
-        {providers.length === 0 ? (
-          <p className="text-sm text-gray-600 dark:text-gray-400">No LLM providers configured yet.</p>
-        ) : (
-          <div className="space-y-2">
-            <div className="hidden grid-cols-[1fr_1.1fr_0.8fr_0.6fr_0.6fr_auto] gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-gray-500 dark:border-gray-800 dark:bg-gray-900/60 dark:text-gray-400 md:grid">
-              <span>Name</span>
-              <span>Base URL</span>
-              <span>Model</span>
-              <span>Key</span>
-              <span>Status</span>
-              <span>Actions</span>
-            </div>
-            {providers.map((provider) => (
-              <div key={provider.id} className="grid grid-cols-1 gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/70 md:grid-cols-[1fr_1.1fr_0.8fr_0.6fr_0.6fr_auto] md:items-center">
-                <div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 md:hidden">Name</p>
-                  <p className="font-semibold text-gray-900 dark:text-gray-100">{provider.name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 md:hidden">Base URL</p>
-                  <p className="truncate text-sm text-gray-900 dark:text-gray-100">{provider.base_url}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 md:hidden">Model</p>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{provider.model}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 md:hidden">Key</p>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">
-                    {!provider.has_api_key ? 'Missing' : provider.key_source === 'vault' ? 'Vault' : 'Env fallback'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 md:hidden">Status</p>
-                  <Badge tone={provider.id === activeProviderId ? 'success' : 'default'}>
-                    {provider.id === activeProviderId ? 'Active' : 'Inactive'}
-                  </Badge>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  <Button
-                    variant="secondary"
-                    className="h-8 px-2 text-xs"
-                    onClick={() => testProviderById(provider.id)}
-                  >
-                    Test provider
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="h-8 px-2 text-xs"
-                    onClick={() => beginEditProvider(provider)}
-                  >
-                    <Pencil size={14} /> Edit
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="h-8 px-2 text-xs"
-                    disabled={provider.id === activeProviderId}
-                    onClick={() => activateProvider(provider.id)}
-                  >
-                    <Check size={14} /> Set active
-                  </Button>
-                  <Button
-                    variant="danger"
-                    className="h-8 px-2 text-xs"
-                    onClick={() => removeProvider(provider)}
-                  >
-                    <Trash2 size={14} /> Delete
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <form onSubmit={saveProvider} className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-            {editingProviderId ? 'Edit provider' : 'Add provider'}
-          </p>
-          <div className="grid gap-2 md:grid-cols-2">
-            <Input
-              placeholder="Provider name"
-              value={providerForm.name}
-              onChange={(event) => setProviderForm({ ...providerForm, name: event.target.value })}
-            />
-            <Input
-              placeholder="Base URL"
-              value={providerForm.base_url}
-              onChange={(event) => setProviderForm({ ...providerForm, base_url: event.target.value })}
-            />
-            <Input
-              placeholder="Model"
-              value={providerForm.model}
-              onChange={(event) => setProviderForm({ ...providerForm, model: event.target.value })}
-            />
-            <Input
-              type="password"
-              placeholder="API key"
-              value={providerForm.api_key}
-              onChange={(event) => setProviderForm({ ...providerForm, api_key: event.target.value })}
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" className="h-8 px-2 text-xs" onClick={testProviderFromForm}>
-              Test provider
-            </Button>
-            <Button type="submit" disabled={busy} className="h-8 px-2 text-xs">
-              <Plus size={14} /> Save provider
-            </Button>
-            {editingProviderId ? (
-              <Button type="button" variant="ghost" className="h-8 px-2 text-xs" onClick={resetProviderForm}>
-                Cancel edit
-              </Button>
-            ) : null}
-          </div>
-        </form>
-      </Card>
-
-      <Card className="space-y-4">
         <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Job Sources</h2>
         <p className="text-sm text-gray-600 dark:text-gray-400">Select which job sources to query when starting hunts. All sources run in parallel.</p>
 
@@ -909,7 +635,7 @@ export function SettingsPage() {
             <Badge tone="info">{credentials.length}</Badge>
           </div>
           <p className="text-xs text-gray-600 dark:text-gray-400">
-            Used for Greenhouse/Lever/Workday login. Not used for LLM providers.
+            Used for Greenhouse/Lever/Workday login. Not used for OpenRouter or Steel BYOK keys.
           </p>
 
           {credentials.length === 0 ? (

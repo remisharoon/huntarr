@@ -182,17 +182,6 @@ type HuntPreflightResponse = {
   checked_at: string
 }
 
-type LLMProviderRecord = {
-  id: string
-  name: string
-  base_url: string
-  model: string
-  api_key: string | null
-  key_source: 'none' | 'env' | 'vault'
-  created_at: string
-  updated_at: string
-}
-
 type ScheduleRecord = {
   id: string
   name: string
@@ -786,47 +775,38 @@ async function buildHuntPreflight(
     }
   }
 
-  const providers = await listCollection<LLMProviderRecord>(storage, userId, 'llm-provider')
-  const activeProviderId = asString(await storage.get(userConfigKey(userId, 'llm_active_provider_id'))).trim()
-  const activeProvider = activeProviderId
-    ? providers.find((provider) => provider.id === activeProviderId) || null
-    : null
+  const openRouterCred = await readCredential(storage, userId, 'openrouter.ai')
+  const openRouterApiKey = asString(openRouterCred?.password).trim()
+  const openRouterModel = asString(config.openrouter_model).trim() || 'openrouter/free'
 
-  if (!providers.length) {
-    pushWarning('No LLM provider is configured. Add one in Settings.')
-  } else if (!activeProvider) {
-    pushWarning('No active LLM provider selected. Set an active provider in Settings.')
-  } else {
-    const baseUrl = asString(activeProvider.base_url).trim()
-    const model = asString(activeProvider.model).trim()
-    const providerApiKey = asString(activeProvider.api_key).trim()
+  if (!openRouterApiKey) {
+    pushWarning('OpenRouter API key is not set. AI-powered features may fail.')
+  }
+  if (!openRouterModel) {
+    pushWarning('OpenRouter model is missing. Set it in Settings.')
+  }
 
-    if (!baseUrl || !isValidUrl(baseUrl)) {
-      pushWarning('Active LLM provider base URL is missing or invalid.')
-    }
-    if (!model) {
-      pushWarning('Active LLM provider model is missing.')
-    }
-    if (!providerApiKey) {
-      pushWarning('Active LLM provider API key is missing.')
-    }
+  if (options.includeReachability && openRouterApiKey) {
+    const probe = await probeUrl(
+      'https://openrouter.ai/api/v1/models',
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${openRouterApiKey}`,
+        },
+      },
+      6000,
+    )
 
-    if (options.includeReachability && baseUrl && isValidUrl(baseUrl)) {
-      const normalizedBaseUrl = baseUrl.replace(/\/+$/, '')
-      const headers: Record<string, string> = { Accept: 'application/json' }
-      if (providerApiKey) {
-        headers.Authorization = `Bearer ${providerApiKey}`
-      }
-      const probe = await probeUrl(`${normalizedBaseUrl}/models`, { method: 'GET', headers }, 6000)
-      if (!probe.reachable) {
-        pushWarning(`Active LLM provider endpoint is unreachable: ${compactMessage(probe.error || 'network error')}.`)
-      } else if (probe.status === 401 || probe.status === 403) {
-        pushWarning('Active LLM provider API key appears invalid (unauthorized response).')
-      } else if (probe.status && probe.status >= 500) {
-        pushWarning(`Active LLM provider endpoint returned HTTP ${probe.status}.`)
-      } else if (probe.status && probe.status >= 400) {
-        pushWarning(`Active LLM provider endpoint returned HTTP ${probe.status}. Check provider base URL and model compatibility.`)
-      }
+    if (!probe.reachable) {
+      pushWarning(`OpenRouter endpoint is unreachable: ${compactMessage(probe.error || 'network error')}.`)
+    } else if (probe.status === 401 || probe.status === 403) {
+      pushWarning('OpenRouter API key appears invalid (unauthorized response).')
+    } else if (probe.status && probe.status >= 500) {
+      pushWarning(`OpenRouter endpoint returned HTTP ${probe.status}.`)
+    } else if (probe.status && probe.status >= 400) {
+      pushWarning(`OpenRouter endpoint returned HTTP ${probe.status}. Check your API key and model setting.`)
     }
   }
 
@@ -1345,186 +1325,6 @@ app.delete('/api/credentials/:domain/:username', async (c) => {
   const storage = storageFor(c)
   await storage.del(userCredentialKey(userId, domain, username))
   return c.json({ success: true })
-})
-
-app.get('/api/llm/providers', async (c) => {
-  const userId = c.get('userId')
-  const storage = storageFor(c)
-  const activeProviderId = asString(await storage.get(userConfigKey(userId, 'llm_active_provider_id')), '') || null
-  const providers = await listCollection<LLMProviderRecord>(storage, userId, 'llm-provider')
-  return c.json({
-    active_provider_id: activeProviderId,
-    items: providers.map((provider) => ({
-      id: provider.id,
-      name: provider.name,
-      base_url: provider.base_url,
-      model: provider.model,
-      has_api_key: Boolean(provider.api_key),
-      key_source: provider.key_source || 'none',
-      is_active: provider.id === activeProviderId,
-      updated_at: provider.updated_at,
-    })),
-  })
-})
-
-app.post('/api/llm/providers', async (c) => {
-  const userId = c.get('userId')
-  const body = await c.req.json<{
-    name?: string
-    base_url?: string
-    model?: string
-    api_key?: string
-  }>()
-
-  const name = asString(body.name).trim()
-  const baseUrl = asString(body.base_url).trim()
-  const model = asString(body.model).trim()
-  if (!name || !baseUrl || !model) {
-    throw new HTTPException(400, { message: 'name, base_url, and model are required' })
-  }
-
-  const now = nowIso()
-  const provider: LLMProviderRecord = {
-    id: createId('llm'),
-    name,
-    base_url: baseUrl,
-    model,
-    api_key: asString(body.api_key).trim() || null,
-    key_source: asString(body.api_key).trim() ? 'vault' : 'none',
-    created_at: now,
-    updated_at: now,
-  }
-
-  const storage = storageFor(c)
-  await putCollectionItem(storage, userId, 'llm-provider', provider.id, provider)
-
-  const activeProviderId = asString(await storage.get(userConfigKey(userId, 'llm_active_provider_id')))
-  if (!activeProviderId) {
-    await storage.put(userConfigKey(userId, 'llm_active_provider_id'), provider.id)
-  }
-
-  return c.json({ id: provider.id }, 201)
-})
-
-app.put('/api/llm/providers/:id', async (c) => {
-  const userId = c.get('userId')
-  const providerId = c.req.param('id')
-  const storage = storageFor(c)
-  const current = await getCollectionItem<LLMProviderRecord>(storage, userId, 'llm-provider', providerId)
-  if (!current) {
-    throw new HTTPException(404, { message: 'Provider not found' })
-  }
-
-  const body = await c.req.json<{
-    name?: string
-    base_url?: string
-    model?: string
-    api_key?: string
-  }>()
-
-  const next: LLMProviderRecord = {
-    ...current,
-    name: asString(body.name, current.name).trim() || current.name,
-    base_url: asString(body.base_url, current.base_url).trim() || current.base_url,
-    model: asString(body.model, current.model).trim() || current.model,
-    updated_at: nowIso(),
-  }
-
-  if (typeof body.api_key === 'string') {
-    next.api_key = body.api_key.trim() || null
-    next.key_source = next.api_key ? 'vault' : 'none'
-  }
-
-  await putCollectionItem(storage, userId, 'llm-provider', providerId, next)
-  return c.json({ success: true })
-})
-
-app.post('/api/llm/providers/:id/activate', async (c) => {
-  const userId = c.get('userId')
-  const providerId = c.req.param('id')
-  const storage = storageFor(c)
-  const provider = await getCollectionItem<LLMProviderRecord>(storage, userId, 'llm-provider', providerId)
-  if (!provider) {
-    throw new HTTPException(404, { message: 'Provider not found' })
-  }
-  await storage.put(userConfigKey(userId, 'llm_active_provider_id'), providerId)
-  return c.json({ success: true })
-})
-
-app.delete('/api/llm/providers/:id', async (c) => {
-  const userId = c.get('userId')
-  const providerId = c.req.param('id')
-  const storage = storageFor(c)
-  await deleteCollectionItem(storage, userId, 'llm-provider', providerId)
-
-  const activeProviderId = asString(await storage.get(userConfigKey(userId, 'llm_active_provider_id')))
-  if (activeProviderId === providerId) {
-    await storage.put(userConfigKey(userId, 'llm_active_provider_id'), '')
-  }
-
-  return c.json({ success: true })
-})
-
-app.post('/api/llm/providers/test', async (c) => {
-  const userId = c.get('userId')
-  const body = await c.req.json<{
-    provider_id?: string
-    base_url?: string
-    model?: string
-    api_key?: string
-  }>()
-
-  const storage = storageFor(c)
-  let baseUrl = asString(body.base_url).trim()
-  let model = asString(body.model).trim()
-  let apiKey = asString(body.api_key).trim()
-
-  if (body.provider_id) {
-    const provider = await getCollectionItem<LLMProviderRecord>(storage, userId, 'llm-provider', body.provider_id)
-    if (!provider) {
-      throw new HTTPException(404, { message: 'Provider not found' })
-    }
-    baseUrl = baseUrl || provider.base_url
-    model = model || provider.model
-    apiKey = apiKey || asString(provider.api_key)
-  }
-
-  if (!baseUrl || !model) {
-    throw new HTTPException(400, { message: 'base_url and model are required' })
-  }
-  if (!apiKey) {
-    throw new HTTPException(400, { message: 'No API key available for provider test' })
-  }
-
-  const normalized = baseUrl.replace(/\/+$/, '')
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 10000)
-
-  try {
-    const response = await fetch(`${normalized}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content: 'Reply only with: ok' }],
-        max_tokens: 8,
-        temperature: 0,
-      }),
-      signal: controller.signal,
-    })
-
-    if (!response.ok) {
-      const message = await response.text()
-      throw new HTTPException(502, { message: message || `Provider test failed (${response.status})` })
-    }
-
-    return c.json({ ok: true, message: 'Provider test succeeded' })
-  } finally {
-    clearTimeout(timeout)
-  }
 })
 
 app.get('/api/schedules', async (c) => {
