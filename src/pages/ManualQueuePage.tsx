@@ -1,6 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Badge, Button, Card, FilterChip, PageHeader } from '../components/ui'
 
+type ResolveManualPayload = {
+  id: string
+  mode: 'generic' | 'submitted'
+  note?: string
+  submittedAt?: string
+}
+
 function deriveUrgency(action: any): 'high' | 'medium' | 'low' {
   const source = `${action.action_type || ''} ${action.title || ''}`.toLowerCase()
   if (source.includes('captcha') || source.includes('challenge') || source.includes('blocked')) return 'high'
@@ -15,9 +22,10 @@ export function ManualQueuePage({
 }: {
   actions: any[]
   onStart: (id: string) => void
-  onResolve: (id: string) => void
+  onResolve: (payload: ResolveManualPayload) => void
 }) {
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'resolved'>('all')
+  const [resolutionDrafts, setResolutionDrafts] = useState<Record<string, { note: string; submittedAt: string }>>({})
 
   const filteredActions = useMemo(() => {
     return actions.filter((action) => {
@@ -25,6 +33,23 @@ export function ManualQueuePage({
       return action.status === statusFilter
     })
   }, [actions, statusFilter])
+
+  const getDraft = (actionId: string) => {
+    const existing = resolutionDrafts[actionId]
+    if (existing) return existing
+    return { note: '', submittedAt: '' }
+  }
+
+  const updateDraft = (actionId: string, next: Partial<{ note: string; submittedAt: string }>) => {
+    const current = getDraft(actionId)
+    setResolutionDrafts((prev) => ({
+      ...prev,
+      [actionId]: {
+        ...current,
+        ...next,
+      },
+    }))
+  }
 
   return (
     <div className="space-y-4">
@@ -92,9 +117,41 @@ export function ManualQueuePage({
                     <Button variant="secondary" className="h-8 px-2 text-xs" onClick={() => onStart(action.id)}>
                       Start Session
                     </Button>
-                    <Button className="h-8 px-2 text-xs" onClick={() => onResolve(action.id)}>
-                      Resolve
-                    </Button>
+                    {action.action_type === 'complete_application_submission' && action.status !== 'resolved' ? (
+                      <>
+                        <input
+                          type="datetime-local"
+                          value={getDraft(action.id).submittedAt}
+                          onChange={(event) => updateDraft(action.id, { submittedAt: event.target.value })}
+                          className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+                          title="Submission timestamp"
+                        />
+                        <input
+                          type="text"
+                          value={getDraft(action.id).note}
+                          onChange={(event) => updateDraft(action.id, { note: event.target.value })}
+                          placeholder="Optional confirmation note"
+                          className="h-8 w-52 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+                        />
+                        <Button
+                          className="h-8 px-2 text-xs"
+                          onClick={() =>
+                            onResolve({
+                              id: action.id,
+                              mode: 'submitted',
+                              note: getDraft(action.id).note,
+                              submittedAt: getDraft(action.id).submittedAt,
+                            })
+                          }
+                        >
+                          Confirm Submitted
+                        </Button>
+                      </>
+                    ) : (
+                      <Button className="h-8 px-2 text-xs" onClick={() => onResolve({ id: action.id, mode: 'generic' })}>
+                        Resolve
+                      </Button>
+                    )}
                   </div>
                 </div>
               )

@@ -277,10 +277,22 @@ export default function App({ authEnabled = false }: AppProps) {
     }
   }
 
-  const onResolveManual = async (id: string) => {
+  const onResolveManual = async (payload: { id: string; mode: 'generic' | 'submitted'; note?: string; submittedAt?: string }) => {
     try {
       setError(null)
-      await api.resolveManualAction(id)
+      if (payload.mode === 'submitted') {
+        const submittedAtIso = payload.submittedAt ? new Date(payload.submittedAt).toISOString() : undefined
+        await api.resolveManualSubmitted(payload.id, {
+          confirmation_text: payload.note?.trim() || 'Application confirmed submitted by operator in Manual Queue.',
+          submitted_at: submittedAtIso,
+          details: {
+            source: 'ui-manual-queue',
+            operator_note: payload.note?.trim() || null,
+          },
+        })
+      } else {
+        await api.resolveManualAction(payload.id)
+      }
       await refresh()
     } catch (error) {
       setError(formatApiError(error, 'Failed to resolve manual action'))

@@ -4,6 +4,27 @@ import { ArrowLeft, FileText, ShieldAlert } from 'lucide-react'
 import { Button, Card } from '../components/ui'
 import { api } from '../lib/api'
 
+function statusBadgeClass(status: string): string {
+  if (status === 'submitted') {
+    return 'border border-green-200 bg-green-50 text-green-700 dark:border-green-900/50 dark:bg-green-900/20 dark:text-green-300'
+  }
+  if (status === 'failed') {
+    return 'border border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300'
+  }
+  if (status === 'manual_required') {
+    return 'border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300'
+  }
+  if (status === 'skipped') {
+    return 'border border-gray-200 bg-gray-100 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200'
+  }
+  return 'border border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-300'
+}
+
+function prettyStatus(status: string): string {
+  if (!status) return 'unknown'
+  return status.replace(/_/g, ' ')
+}
+
 export function ApplicationDetailPage({ applicationId, onBack }: { applicationId: string; onBack: () => void }) {
   const [application, setApplication] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -48,20 +69,15 @@ export function ApplicationDetailPage({ applicationId, onBack }: { applicationId
       <Card className="space-y-6 p-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Application Details</h1>
-          <p className={`inline-block px-3 py-1 rounded-full text-sm mt-2 ${
-            application.status === 'submitted' ? 'border border-green-200 bg-green-50 text-green-700 dark:border-green-900/50 dark:bg-green-900/20 dark:text-green-300' :
-            application.status === 'failed' ? 'border border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300' :
-            application.status === 'skipped' ? 'border border-gray-200 bg-gray-100 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200' :
-            'border border-yellow-200 bg-yellow-50 text-yellow-700 dark:border-yellow-900/50 dark:bg-yellow-900/20 dark:text-yellow-300'
-          }`}>
-            {application.status}
+          <p className={`mt-2 inline-block rounded-full px-3 py-1 text-sm ${statusBadgeClass(application.status)}`}>
+            {prettyStatus(application.status)}
           </p>
         </div>
 
         <section>
           <h2 className="mb-3 text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Application Status</h2>
           <div className="space-y-2 text-sm">
-            <p><span className="font-semibold">Status:</span> {application.status}</p>
+            <p><span className="font-semibold">Status:</span> {prettyStatus(application.status)}</p>
             {application.source_portal && <p><span className="font-semibold">Source Portal:</span> {application.source_portal}</p>}
             {application.error_code && <p><span className="font-semibold">Error:</span> {application.error_code}</p>}
             {application.confirmation_text && (

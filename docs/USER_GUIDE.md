@@ -68,6 +68,22 @@ Notes:
 - Brave Search is shown in Settings but unavailable in this cloud build.
 - Some providers require attribution or conservative polling; keep source URL visible in the Jobs list.
 
+## Apply Workflow
+
+When you click **Apply** on a job:
+
+1. Huntarr attempts ATS API auto-submit for supported portals (Lever and Greenhouse).
+2. If auto-submit does not complete, Huntarr starts a live Steel browser session.
+3. Huntarr detects ATS type from the job URL (when possible).
+4. Huntarr prepares autofill data from your Profile.
+5. If final submission needs confirmation, an item is added to **Manual Queue**.
+6. Resolve the manual item after submitting in session to mark the application as submitted.
+
+Notes:
+
+- Application status can be `manual_required`, `submitted`, or `failed`.
+- `submitted` is only shown after ATS/API success or explicit manual confirmation.
+
 ## Notes
 
 - OpenRouter uses BYOK policy.

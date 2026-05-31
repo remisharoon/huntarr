@@ -46,6 +46,31 @@ Checks:
 - Optional project ID is correct.
 - `/api/byok/steel/session` responds successfully.
 
+## Apply Stuck in `manual_required`
+
+Symptoms:
+
+- Application status remains `manual_required` after clicking Apply.
+
+Checks:
+
+- Open the linked manual action session URL and complete final portal submission.
+- In Manual Queue, resolve the manual action once submit is complete.
+- Ensure ATS credentials (if required) are present in Settings.
+- Confirm job posting URL is valid and reachable.
+
+## Auto-submit Fails But Session Opens
+
+Symptoms:
+
+- Apply does not auto-submit, but a manual action/session is created.
+
+Checks:
+
+- ATS API auto-submit is currently only implemented for Lever and Greenhouse.
+- For unsupported ATS, manual completion is expected.
+- For Lever/Greenhouse, verify posting URL format and required fields (email/name/phone).
+
 ## Build Fails in Frontend
 
 Run:

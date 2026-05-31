@@ -1970,6 +1970,802 @@ async function readCredential(storage: Storage, userId: string, domain: string, 
   }
 }
 
+type AtsKind =
+  | 'greenhouse'
+  | 'lever'
+  | 'workday'
+  | 'smartrecruiters'
+  | 'ashby'
+  | 'bamboohr'
+  | 'icims'
+  | 'taleo'
+  | 'unknown'
+
+type AtsDetection = {
+  kind: AtsKind
+  label: string
+  hostname: string | null
+}
+
+type MatchedCredential = {
+  domain: string
+  username: string
+}
+
+function safeUrl(value: string | null): URL | null {
+  if (!value) return null
+  try {
+    return new URL(value)
+  } catch {
+    return null
+  }
+}
+
+function detectAtsFromJobUrl(jobUrl: string | null): AtsDetection {
+  const parsed = safeUrl(jobUrl)
+  const hostname = parsed?.hostname.toLowerCase() || null
+  if (!hostname) {
+    return { kind: 'unknown', label: 'Unknown Portal', hostname: null }
+  }
+
+  if (hostname.endsWith('greenhouse.io')) {
+    return { kind: 'greenhouse', label: 'Greenhouse', hostname }
+  }
+  if (hostname.endsWith('lever.co')) {
+    return { kind: 'lever', label: 'Lever', hostname }
+  }
+  if (hostname.endsWith('myworkdayjobs.com') || hostname.includes('workday')) {
+    return { kind: 'workday', label: 'Workday', hostname }
+  }
+  if (hostname.endsWith('smartrecruiters.com')) {
+    return { kind: 'smartrecruiters', label: 'SmartRecruiters', hostname }
+  }
+  if (hostname.endsWith('ashbyhq.com') || hostname.endsWith('ashby.so')) {
+    return { kind: 'ashby', label: 'Ashby', hostname }
+  }
+  if (hostname.endsWith('bamboohr.com')) {
+    return { kind: 'bamboohr', label: 'BambooHR', hostname }
+  }
+  if (hostname.endsWith('icims.com')) {
+    return { kind: 'icims', label: 'iCIMS', hostname }
+  }
+  if (hostname.endsWith('taleo.net') || hostname.endsWith('oraclecloud.com')) {
+    return { kind: 'taleo', label: 'Taleo', hostname }
+  }
+
+  return { kind: 'unknown', label: hostname, hostname }
+}
+
+function buildProfileAutofillPayload(profile: JsonObject): JsonObject {
+  const skills = asStringArray(profile.skills)
+  const links = Array.isArray(profile.links)
+    ? profile.links
+        .map((item) => asObject(item))
+        .map((item) => ({
+          label: asString(item.label).trim(),
+          url: asString(item.url).trim(),
+        }))
+        .filter((item) => item.label || item.url)
+    : []
+
+  const payload: JsonObject = {
+    full_name: asString(profile.full_name).trim(),
+    email: asString(profile.email).trim(),
+    phone: asString(profile.phone).trim(),
+    location: asString(profile.location).trim(),
+    years_experience: asNumber(profile.years_experience, 0),
+    summary: asString(profile.summary).trim(),
+    desired_job_title: asString(profile.desired_job_title).trim(),
+    desired_location: asString(profile.desired_location).trim(),
+    resume_path: asString(profile.resume_path).trim(),
+    skills,
+    links,
+  }
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (typeof value === 'string' && !value.trim()) {
+      delete payload[key]
+      continue
+    }
+    if (Array.isArray(value) && value.length === 0) {
+      delete payload[key]
+      continue
+    }
+    if (key === 'years_experience' && value === 0) {
+      delete payload[key]
+    }
+  }
+
+  return payload
+}
+
+function buildProfileAutofillAnswers(profile: JsonObject, createdAt: string): ApplicationRecord['answers'] {
+  const mapping: Array<{ key: string; label: string; confidence: number }> = [
+    { key: 'full_name', label: 'Full name', confidence: 0.99 },
+    { key: 'email', label: 'Email', confidence: 0.99 },
+    { key: 'phone', label: 'Phone', confidence: 0.97 },
+    { key: 'location', label: 'Location', confidence: 0.95 },
+    { key: 'years_experience', label: 'Years of experience', confidence: 0.9 },
+    { key: 'summary', label: 'Professional summary', confidence: 0.88 },
+    { key: 'desired_job_title', label: 'Desired role', confidence: 0.85 },
+    { key: 'desired_location', label: 'Preferred location', confidence: 0.85 },
+    { key: 'resume_path', label: 'Resume path', confidence: 0.95 },
+  ]
+
+  const answers: ApplicationRecord['answers'] = []
+  for (const item of mapping) {
+    const raw = profile[item.key]
+    const value = typeof raw === 'number' ? String(raw) : asString(raw).trim()
+    if (!value) continue
+    answers.push({
+      question: item.label,
+      answer: value,
+      confidence: item.confidence,
+      created_at: createdAt,
+    })
+  }
+
+  const skills = asStringArray(profile.skills)
+  if (skills.length) {
+    answers.push({
+      question: 'Skills',
+      answer: skills.join(', '),
+      confidence: 0.9,
+      created_at: createdAt,
+    })
+  }
+
+  return answers
+}
+
+function extractSteelSessionId(session: JsonObject): string | null {
+  const direct = asString(session.id).trim()
+  if (direct) return direct
+  const sessionId = asString(session.session_id).trim() || asString(session.sessionId).trim()
+  return sessionId || null
+}
+
+function extractSteelSessionUrl(session: JsonObject): string | null {
+  const links = asObject(session.links)
+  const candidate =
+    asString(session.session_viewer_url).trim() ||
+    asString(session.sessionViewerUrl).trim() ||
+    asString(session.viewer_url).trim() ||
+    asString(session.viewerUrl).trim() ||
+    asString(session.url).trim() ||
+    asString(links.session_viewer_url).trim() ||
+    asString(links.viewer_url).trim()
+
+  if (!candidate) return null
+  return isValidUrl(candidate) ? candidate : null
+}
+
+async function createSteelSession(apiKey: string, projectId: string | null, metadata: JsonObject): Promise<JsonObject> {
+  const payload: JsonObject = {
+    metadata,
+  }
+
+  if (projectId) {
+    payload.projectId = projectId
+  }
+
+  const response = await fetch('https://api.steel.dev/v1/sessions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(text || `Steel API failed with status ${response.status}`)
+  }
+
+  return asObject(await response.json())
+}
+
+async function findCredentialForHostname(
+  storage: Storage,
+  userId: string,
+  hostname: string | null,
+): Promise<MatchedCredential | null> {
+  if (!hostname) return null
+
+  const normalizedHost = hostname.toLowerCase()
+  const rows = await storage.list(userCredentialPrefix(userId))
+  let best: MatchedCredential | null = null
+  let bestScore = -1
+
+  for (const row of rows) {
+    const suffix = row.key.replace(userCredentialPrefix(userId), '')
+    const separator = suffix.indexOf(':')
+    if (separator < 1) continue
+
+    const domain = decodeURIComponent(suffix.slice(0, separator)).toLowerCase()
+    const username = decodeURIComponent(suffix.slice(separator + 1))
+    const value = asObject(row.value)
+    const password = asString(value.password).trim()
+    if (!domain || !username || !password) continue
+
+    if (!(normalizedHost === domain || normalizedHost.endsWith(`.${domain}`) || domain.endsWith(`.${normalizedHost}`))) {
+      continue
+    }
+
+    const score = domain.length
+    if (score > bestScore) {
+      best = { domain, username }
+      bestScore = score
+    }
+  }
+
+  return best
+}
+
+function buildManualSubmissionInstructions(ats: AtsDetection, jobUrl: string): string[] {
+  const common = [
+    'Open the target application page and verify this role matches the selected job.',
+    'Use the prepared autofill payload in this task to populate profile fields.',
+    'Upload the resume from the configured profile path when file upload is required.',
+    'Submit only after reviewing all required screening questions and legal disclosures.',
+  ]
+
+  if (ats.kind === 'greenhouse') {
+    return ['Greenhouse detected: sign in if prompted, then complete required fields and attachments.', ...common]
+  }
+  if (ats.kind === 'lever') {
+    return ['Lever detected: verify work authorization and location fields before final submit.', ...common]
+  }
+  if (ats.kind === 'workday') {
+    return ['Workday detected: account creation/login is often required before submitting.', ...common]
+  }
+
+  return [`${ats.label} detected: complete the application in the browser session for ${jobUrl}.`, ...common]
+}
+
+type AutoSubmitAttempt = {
+  submitted: boolean
+  confirmation_text: string | null
+  error_code: string | null
+  details: JsonObject
+}
+
+function splitName(fullName: string): { first_name: string; last_name: string } {
+  const normalized = fullName.trim().replace(/\s+/g, ' ')
+  if (!normalized) {
+    return { first_name: '', last_name: '' }
+  }
+
+  const parts = normalized.split(' ')
+  if (parts.length === 1) {
+    return { first_name: parts[0], last_name: '' }
+  }
+
+  return {
+    first_name: parts[0],
+    last_name: parts.slice(1).join(' '),
+  }
+}
+
+function parseLeverPosting(jobUrl: string): { company: string; posting: string } | null {
+  const parsed = safeUrl(jobUrl)
+  if (!parsed) return null
+  if (!parsed.hostname.toLowerCase().endsWith('lever.co')) return null
+
+  const segments = parsed.pathname
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+
+  if (segments.length < 2) return null
+  return {
+    company: segments[0],
+    posting: segments[1],
+  }
+}
+
+function parseGreenhousePosting(jobUrl: string): { board: string; job_id: string } | null {
+  const parsed = safeUrl(jobUrl)
+  if (!parsed) return null
+  if (!parsed.hostname.toLowerCase().endsWith('greenhouse.io')) return null
+
+  const segments = parsed.pathname
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+
+  const jobsIndex = segments.findIndex((segment) => segment === 'jobs')
+  if (jobsIndex < 1 || jobsIndex === segments.length - 1) return null
+
+  return {
+    board: segments[0],
+    job_id: segments[jobsIndex + 1],
+  }
+}
+
+function parseWorkdayPosting(jobUrl: string): {
+  origin: string
+  tenant: string
+  site: string
+  locale: string | null
+  job_ref: string
+} | null {
+  const parsed = safeUrl(jobUrl)
+  if (!parsed) return null
+
+  const hostname = parsed.hostname.toLowerCase()
+  if (!hostname.endsWith('myworkdayjobs.com') && !hostname.includes('workday')) {
+    return null
+  }
+
+  const segments = parsed.pathname
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+
+  if (!segments.length) return null
+
+  const maybeLocale = segments[0]
+  const locale = /^[a-z]{2}-[A-Z]{2}$/.test(maybeLocale) ? maybeLocale : null
+  const siteIndex = locale ? 1 : 0
+  const site = segments[siteIndex] || 'External'
+  const jobRef = segments[segments.length - 1]
+  const tenant = hostname.split('.')[0] || 'tenant'
+
+  return {
+    origin: `${parsed.protocol}//${parsed.host}`,
+    tenant,
+    site,
+    locale,
+    job_ref: jobRef,
+  }
+}
+
+async function attemptLeverAutoSubmit(jobUrl: string, profile: JsonObject): Promise<AutoSubmitAttempt> {
+  const posting = parseLeverPosting(jobUrl)
+  if (!posting) {
+    return {
+      submitted: false,
+      confirmation_text: null,
+      error_code: 'lever_url_parse_failed',
+      details: {
+        ats: 'lever',
+        reason: 'Could not parse Lever posting URL',
+      },
+    }
+  }
+
+  const payload: JsonObject = {
+    name: asString(profile.full_name).trim(),
+    email: asString(profile.email).trim(),
+    phone: asString(profile.phone).trim(),
+    comments: asString(profile.summary).trim(),
+    location: asString(profile.location).trim(),
+  }
+
+  const links = Array.isArray(profile.links)
+    ? profile.links.map((item) => asObject(item)).map((item) => asString(item.url).trim()).filter(Boolean)
+    : []
+  if (links.length) {
+    payload.urls = links
+  }
+
+  const endpoint = `https://api.lever.co/v0/postings/${encodeURIComponent(posting.company)}/${encodeURIComponent(posting.posting)}/apply`
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+
+    const text = await response.text()
+    let parsedBody: JsonObject = {}
+    try {
+      parsedBody = asObject(text ? JSON.parse(text) : {})
+    } catch {
+      parsedBody = {}
+    }
+
+    if (!response.ok) {
+      return {
+        submitted: false,
+        confirmation_text: null,
+        error_code: 'lever_apply_rejected',
+        details: {
+          ats: 'lever',
+          endpoint,
+          status: response.status,
+          response_body: text.slice(0, 500),
+        },
+      }
+    }
+
+    const confirmationId =
+      asString(parsedBody.id).trim() ||
+      asString(parsedBody.application_id).trim() ||
+      asString(parsedBody.applicationId).trim() ||
+      asString(parsedBody.confirmation_id).trim()
+
+    return {
+      submitted: true,
+      confirmation_text: confirmationId
+        ? `Auto-submitted via Lever API. Confirmation ID: ${confirmationId}`
+        : 'Auto-submitted via Lever API.',
+      error_code: null,
+      details: {
+        ats: 'lever',
+        endpoint,
+        status: response.status,
+        confirmation_id: confirmationId || null,
+      },
+    }
+  } catch (error) {
+    return {
+      submitted: false,
+      confirmation_text: null,
+      error_code: 'lever_apply_request_failed',
+      details: {
+        ats: 'lever',
+        endpoint,
+        error: compactMessage(error instanceof Error ? error.message : 'unknown error', 200),
+      },
+    }
+  }
+}
+
+async function attemptGreenhouseAutoSubmit(jobUrl: string, profile: JsonObject): Promise<AutoSubmitAttempt> {
+  const posting = parseGreenhousePosting(jobUrl)
+  if (!posting) {
+    return {
+      submitted: false,
+      confirmation_text: null,
+      error_code: 'greenhouse_url_parse_failed',
+      details: {
+        ats: 'greenhouse',
+        reason: 'Could not parse Greenhouse posting URL',
+      },
+    }
+  }
+
+  const names = splitName(asString(profile.full_name))
+  const payload: JsonObject = {
+    first_name: names.first_name,
+    last_name: names.last_name,
+    email: asString(profile.email).trim(),
+    phone: asString(profile.phone).trim(),
+    location: asString(profile.location).trim(),
+    resume_text: asString(profile.summary).trim(),
+  }
+
+  const endpoint = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(posting.board)}/jobs/${encodeURIComponent(posting.job_id)}/applications`
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+
+    const text = await response.text()
+    let parsedBody: JsonObject = {}
+    try {
+      parsedBody = asObject(text ? JSON.parse(text) : {})
+    } catch {
+      parsedBody = {}
+    }
+
+    if (!response.ok) {
+      return {
+        submitted: false,
+        confirmation_text: null,
+        error_code: 'greenhouse_apply_rejected',
+        details: {
+          ats: 'greenhouse',
+          endpoint,
+          status: response.status,
+          response_body: text.slice(0, 500),
+        },
+      }
+    }
+
+    const confirmationId =
+      asString(parsedBody.id).trim() ||
+      asString(parsedBody.application_id).trim() ||
+      asString(parsedBody.applicationId).trim() ||
+      asString(parsedBody.confirmation_id).trim()
+
+    return {
+      submitted: true,
+      confirmation_text: confirmationId
+        ? `Auto-submitted via Greenhouse API. Confirmation ID: ${confirmationId}`
+        : 'Auto-submitted via Greenhouse API.',
+      error_code: null,
+      details: {
+        ats: 'greenhouse',
+        endpoint,
+        status: response.status,
+        confirmation_id: confirmationId || null,
+      },
+    }
+  } catch (error) {
+    return {
+      submitted: false,
+      confirmation_text: null,
+      error_code: 'greenhouse_apply_request_failed',
+      details: {
+        ats: 'greenhouse',
+        endpoint,
+        error: compactMessage(error instanceof Error ? error.message : 'unknown error', 200),
+      },
+    }
+  }
+}
+
+async function attemptWorkdayHeuristicAutoSubmit(jobUrl: string): Promise<AutoSubmitAttempt> {
+  const posting = parseWorkdayPosting(jobUrl)
+  if (!posting) {
+    return {
+      submitted: false,
+      confirmation_text: null,
+      error_code: 'workday_url_parse_failed',
+      details: {
+        ats: 'workday',
+        reason: 'Could not parse Workday posting URL',
+      },
+    }
+  }
+
+  const details: JsonObject = {
+    ats: 'workday',
+    heuristic_pass: 'discovery_probe',
+    job_ref: posting.job_ref,
+    tenant: posting.tenant,
+    site: posting.site,
+    locale: posting.locale,
+  }
+
+  let pageText = ''
+  let pageStatus: number | null = null
+  try {
+    const pageResponse = await fetch(jobUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    })
+    pageStatus = pageResponse.status
+    pageText = (await pageResponse.text()).slice(0, 6000)
+    details.page_probe = {
+      status: pageStatus,
+      ok: pageResponse.ok,
+    }
+  } catch (error) {
+    details.page_probe = {
+      status: null,
+      ok: false,
+      error: compactMessage(error instanceof Error ? error.message : 'unknown page probe error', 180),
+    }
+  }
+
+  const markers = {
+    contains_apply_text: /apply/i.test(pageText),
+    contains_login_hint: /(sign in|log in|existing account|create account)/i.test(pageText),
+    contains_captcha: /(captcha|recaptcha|hcaptcha)/i.test(pageText),
+    contains_workday_bootstrap: /(myworkdayjobs|workday|wd5|candidate)/i.test(pageText),
+  }
+  details.page_markers = markers
+
+  const cxsEndpoint = `${posting.origin}/wday/cxs/${encodeURIComponent(posting.tenant)}/${encodeURIComponent(posting.site)}/jobs`
+  try {
+    const cxsResponse = await fetch(cxsEndpoint, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        limit: 5,
+        offset: 0,
+        searchText: posting.job_ref.replace(/[-_]+/g, ' '),
+      }),
+    })
+
+    const cxsText = await cxsResponse.text()
+    let cxsPayload: JsonObject = {}
+    try {
+      cxsPayload = asObject(cxsText ? JSON.parse(cxsText) : {})
+    } catch {
+      cxsPayload = {}
+    }
+
+    const jobPostings = Array.isArray(cxsPayload.jobPostings)
+      ? cxsPayload.jobPostings.map((row) => asObject(row))
+      : []
+
+    details.cxs_probe = {
+      endpoint: cxsEndpoint,
+      status: cxsResponse.status,
+      ok: cxsResponse.ok,
+      returned_jobs: jobPostings.length,
+      first_job_title: asString(jobPostings[0]?.title).trim() || null,
+      first_job_external_path: asString(jobPostings[0]?.externalPath).trim() || null,
+      first_job_apply_url: asString(jobPostings[0]?.applyUrl).trim() || null,
+    }
+  } catch (error) {
+    details.cxs_probe = {
+      endpoint: cxsEndpoint,
+      status: null,
+      ok: false,
+      error: compactMessage(error instanceof Error ? error.message : 'unknown cxs probe error', 180),
+    }
+  }
+
+  const errorCode = markers.contains_captcha
+    ? 'workday_captcha_detected'
+    : markers.contains_login_hint
+      ? 'workday_login_required'
+      : 'workday_interactive_flow_required'
+
+  return {
+    submitted: false,
+    confirmation_text: null,
+    error_code: errorCode,
+    details,
+  }
+}
+
+async function attemptAtsAutoSubmit(ats: AtsDetection, jobUrl: string, profile: JsonObject): Promise<AutoSubmitAttempt> {
+  if (ats.kind === 'lever') {
+    return await attemptLeverAutoSubmit(jobUrl, profile)
+  }
+
+  if (ats.kind === 'greenhouse') {
+    return await attemptGreenhouseAutoSubmit(jobUrl, profile)
+  }
+
+  if (ats.kind === 'workday') {
+    return await attemptWorkdayHeuristicAutoSubmit(jobUrl)
+  }
+
+  return {
+    submitted: false,
+    confirmation_text: null,
+    error_code: 'autosubmit_unsupported_ats',
+    details: {
+      ats: ats.kind,
+      reason: 'Automated submit is not implemented for this ATS yet.',
+    },
+  }
+}
+
+function metricKeyForApplicationStatus(status: string): 'applied' | 'failed' | 'manual_required' | null {
+  if (status === 'submitted') return 'applied'
+  if (status === 'failed') return 'failed'
+  if (status === 'manual_required') return 'manual_required'
+  return null
+}
+
+async function applyRunMetricTransition(
+  storage: Storage,
+  userId: string,
+  runId: string | null,
+  previousStatus: string | null,
+  nextStatus: string,
+  nextNode: string,
+): Promise<void> {
+  if (!runId) return
+
+  const run = await getCollectionItem<RunRecord>(storage, userId, 'run', runId)
+  if (!run) return
+
+  const prevKey = metricKeyForApplicationStatus(asString(previousStatus).trim())
+  const nextKey = metricKeyForApplicationStatus(nextStatus)
+  const metrics = { ...run.metrics }
+
+  if (prevKey && prevKey !== nextKey) {
+    metrics[prevKey] = Math.max(0, asNumber(metrics[prevKey], 0) - 1)
+  }
+  if (nextKey && prevKey !== nextKey) {
+    metrics[nextKey] = Math.max(0, asNumber(metrics[nextKey], 0) + 1)
+  }
+
+  const nextRun: RunRecord = {
+    ...run,
+    current_node: nextNode,
+    metrics,
+    updated_at: nowIso(),
+  }
+
+  await putCollectionItem(storage, userId, 'run', runId, nextRun)
+}
+
+async function finalizeManualSubmission(
+  storage: Storage,
+  userId: string,
+  action: ManualActionRecord,
+  details: JsonObject,
+  confirmationText: string | null,
+  submittedAt: string | null,
+): Promise<ApplicationRecord | null> {
+  if (!action.job_id) return null
+
+  const job = await getCollectionItem<JobRecord>(storage, userId, 'job', action.job_id)
+  if (!job) return null
+
+  const applications = await listCollection<ApplicationRecord>(storage, userId, 'application')
+  const existing = applications.find((item) => item.job_id === action.job_id)
+  const now = nowIso()
+
+  const resolvedArtifacts = {
+    ...asObject(existing?.artifacts),
+    manual_resolution: {
+      action_id: action.id,
+      resolved_at: now,
+      resolved_via: 'manual_action',
+      details,
+    },
+  }
+
+  const nextApplication: ApplicationRecord = {
+    id: existing?.id || createId('app'),
+    run_id: job.run_id,
+    job_id: job.id,
+    status: 'submitted',
+    source_portal: existing?.source_portal || job.source || null,
+    error_code: null,
+    confirmation_text:
+      confirmationText || 'Application marked submitted after manual completion in live browser session.',
+    submitted_at: submittedAt || existing?.submitted_at || now,
+    created_at: existing?.created_at || now,
+    updated_at: now,
+    answers: existing?.answers || [],
+    generated_documents: existing?.generated_documents || [],
+    artifacts: resolvedArtifacts,
+  }
+
+  await putCollectionItem(storage, userId, 'application', nextApplication.id, nextApplication)
+
+  const nextJob: JobRecord = {
+    ...job,
+    status: 'applied',
+    updated_at: now,
+  }
+  await putCollectionItem(storage, userId, 'job', job.id, nextJob)
+
+  await applyRunMetricTransition(
+    storage,
+    userId,
+    job.run_id,
+    existing?.status || null,
+    'submitted',
+    'apply_completed',
+  )
+
+  if (job.run_id) {
+    await appendRunEvent(storage, userId, job.run_id, {
+      level: 'info',
+      node: 'apply',
+      event_type: 'apply_manual_resolved',
+      message: `Manual application completion confirmed for ${job.company} - ${job.title}`,
+      payload_json: {
+        job_id: job.id,
+        application_id: nextApplication.id,
+        manual_action_id: action.id,
+      },
+    })
+  }
+
+  return nextApplication
+}
+
 async function buildHuntPreflight(
   storage: Storage,
   userId: string,
@@ -3098,35 +3894,272 @@ app.post('/api/jobs/:id/apply-now', async (c) => {
   }
 
   const now = nowIso()
+  const config = asObject(await storage.get(userConfigKey(userId, 'default')))
+  const profile = {
+    ...defaultProfile,
+    ...asObject(await storage.get(userConfigKey(userId, 'profile'))),
+  }
+
+  const autoSubmitEnabled = config.auto_submit_enabled !== false
+  const browserHeadless = config.browser_headless !== false
+  const steelProjectId = asString(config.steel_project_id).trim() || null
+  const configuredSessionUrl = asString(config.session_url).trim()
+  const ats = detectAtsFromJobUrl(job.url)
+  const profileAutofill = buildProfileAutofillPayload(profile)
+  const profileAnswers = buildProfileAutofillAnswers(profile, now)
+
+  const existingApplications = await listCollection<ApplicationRecord>(storage, userId, 'application')
+  const existingApplication = existingApplications.find((item) => item.job_id === jobId)
+
+  if (existingApplication?.status === 'submitted') {
+    return c.json({
+      success: true,
+      application_id: existingApplication.id,
+      status: existingApplication.status,
+      manual_action_id: null,
+      session_url: null,
+      error_code: existingApplication.error_code,
+      message: 'Application already marked as submitted.',
+    })
+  }
+
+  let status: string = 'failed'
+  let errorCode: string | null = null
+  let confirmationText: string | null = null
+  let submittedAt: string | null = null
+  let manualActionId: string | null = null
+  let sessionUrl: string | null = isValidUrl(configuredSessionUrl) ? configuredSessionUrl : null
+  let sessionId: string | null = null
+  let matchedCredential: MatchedCredential | null = null
+
+  const artifacts: JsonObject = {
+    mode: autoSubmitEnabled ? 'auto_submit_enabled' : 'manual_review_only',
+    browser_headless: browserHeadless,
+    ats_kind: ats.kind,
+    ats_label: ats.label,
+    ats_hostname: ats.hostname,
+    job_url: job.url,
+    source: job.source,
+    profile_autofill: profileAutofill,
+    missing_profile_fields: missingRequiredProfileFields(profile),
+  }
+
+  if (job.run_id) {
+    await appendRunEvent(storage, userId, job.run_id, {
+      level: 'info',
+      node: 'apply',
+      event_type: 'apply_attempt_started',
+      message: `Apply attempt started for ${job.company} - ${job.title}`,
+      payload_json: {
+        job_id: job.id,
+        ats: ats.kind,
+        auto_submit_enabled: autoSubmitEnabled,
+      },
+    })
+  }
+
+  try {
+    if (!job.url || !isValidUrl(job.url)) {
+      throw new Error('Job does not have a valid application URL')
+    }
+
+    if (autoSubmitEnabled) {
+      const autoAttempt = await attemptAtsAutoSubmit(ats, job.url, profile)
+      artifacts.auto_submit_attempt = {
+        attempted_at: nowIso(),
+        ...autoAttempt.details,
+        submitted: autoAttempt.submitted,
+        error_code: autoAttempt.error_code,
+      }
+
+      if (autoAttempt.submitted) {
+        status = 'submitted'
+        errorCode = null
+        confirmationText = autoAttempt.confirmation_text || 'Application submitted via ATS API.'
+        submittedAt = now
+
+        if (job.run_id) {
+          await appendRunEvent(storage, userId, job.run_id, {
+            level: 'info',
+            node: 'apply',
+            event_type: 'apply_submitted_auto',
+            message: `Application auto-submitted for ${job.company} - ${job.title}`,
+            payload_json: {
+              job_id: job.id,
+              ats: ats.kind,
+            },
+          })
+        }
+      }
+    } else {
+      artifacts.auto_submit_attempt = {
+        attempted_at: nowIso(),
+        submitted: false,
+        error_code: 'autosubmit_disabled',
+        reason: 'Auto-submit disabled in Settings.',
+      }
+    }
+
+    if (status !== 'submitted') {
+      const steelCred = await readCredential(storage, userId, 'steel.dev')
+      if (!steelCred) {
+        throw new Error('Steel API key is missing. Configure it in Settings before applying.')
+      }
+
+      const steelMetadata: JsonObject = {
+        source: 'huntarr-apply-now',
+        user_id: userId,
+        job_id: job.id,
+        run_id: job.run_id,
+        ats_kind: ats.kind,
+        auto_submit_enabled: autoSubmitEnabled,
+        browser_headless: browserHeadless,
+        job_url: job.url,
+        company: job.company,
+        title: job.title,
+      }
+
+      const session = await createSteelSession(steelCred.password, steelProjectId, steelMetadata)
+      sessionId = extractSteelSessionId(session)
+      sessionUrl = extractSteelSessionUrl(session) || sessionUrl
+      artifacts.steel = {
+        session_id: sessionId,
+        session_url: sessionUrl,
+        project_id: steelProjectId,
+        created_at: nowIso(),
+      }
+
+      matchedCredential = await findCredentialForHostname(storage, userId, ats.hostname)
+      if (matchedCredential) {
+        artifacts.matched_ats_credential = matchedCredential
+      }
+
+      const instructions = buildManualSubmissionInstructions(ats, job.url)
+      artifacts.manual_instructions = instructions
+
+      const manualActions = await listCollection<ManualActionRecord>(storage, userId, 'manual-action')
+      const existingAction = manualActions.find(
+        (item) => item.job_id === job.id && item.action_type === 'complete_application_submission' && item.status !== 'resolved',
+      )
+
+      const actionPayload: ManualActionRecord = {
+        id: existingAction?.id || createId('manual'),
+        run_id: job.run_id,
+        job_id: job.id,
+        company: job.company,
+        title: job.title,
+        action_type: 'complete_application_submission',
+        status: 'pending',
+        session_url: sessionUrl,
+        details: {
+          ats_kind: ats.kind,
+          ats_label: ats.label,
+          hostname: ats.hostname,
+          job_url: job.url,
+          session_id: sessionId,
+          session_url: sessionUrl,
+          instructions,
+          profile_autofill: profileAutofill,
+          matched_ats_credential: matchedCredential,
+        },
+        created_at: existingAction?.created_at || now,
+        updated_at: now,
+      }
+
+      await putCollectionItem(storage, userId, 'manual-action', actionPayload.id, actionPayload)
+      manualActionId = actionPayload.id
+
+      status = 'manual_required'
+      errorCode = null
+      confirmationText =
+        'Live Steel browser session created and profile autofill payload prepared. Manual completion is currently required to finalize submission.'
+
+      if (job.run_id) {
+        await appendRunEvent(storage, userId, job.run_id, {
+          level: 'warning',
+          node: 'apply',
+          event_type: 'apply_manual_required',
+          message: `Manual completion required for ${job.company} - ${job.title}`,
+          payload_json: {
+            job_id: job.id,
+            ats: ats.kind,
+            session_id: sessionId,
+            manual_action_id: manualActionId,
+          },
+        })
+      }
+    }
+  } catch (error) {
+    const message = compactMessage(error instanceof Error ? error.message : 'unknown apply error', 260)
+    errorCode =
+      /steel api key is missing/i.test(message)
+        ? 'missing_steel_key'
+        : /valid application url/i.test(message)
+          ? 'invalid_job_url'
+          : 'automation_error'
+    status = 'failed'
+    confirmationText = `Automation failed before submission: ${message}`
+    artifacts.failure = {
+      message,
+      at: nowIso(),
+    }
+
+    if (job.run_id) {
+      await appendRunEvent(storage, userId, job.run_id, {
+        level: 'error',
+        node: 'apply',
+        event_type: 'apply_failed',
+        message: `Apply attempt failed for ${job.company} - ${job.title}: ${message}`,
+        payload_json: {
+          job_id: job.id,
+          ats: ats.kind,
+          error_code: errorCode,
+        },
+      })
+    }
+  }
+
+  const application: ApplicationRecord = {
+    id: existingApplication?.id || createId('app'),
+    run_id: job.run_id,
+    job_id: jobId,
+    status,
+    source_portal: ats.label || job.source || null,
+    error_code: errorCode,
+    confirmation_text: confirmationText,
+    submitted_at: submittedAt,
+    created_at: existingApplication?.created_at || now,
+    updated_at: now,
+    answers: profileAnswers,
+    generated_documents: existingApplication?.generated_documents || [],
+    artifacts,
+  }
+  await putCollectionItem(storage, userId, 'application', application.id, application)
+
   const nextJob: JobRecord = {
     ...job,
-    status: 'applied',
+    status: status === 'submitted' ? 'applied' : 'queued',
     updated_at: now,
   }
   await putCollectionItem(storage, userId, 'job', jobId, nextJob)
 
-  const existingApplications = await listCollection<ApplicationRecord>(storage, userId, 'application')
-  const existing = existingApplications.find((item) => item.job_id === jobId)
-  if (!existing) {
-    const application: ApplicationRecord = {
-      id: createId('app'),
-      run_id: job.run_id,
-      job_id: jobId,
-      status: 'submitted',
-      source_portal: job.source || null,
-      error_code: null,
-      confirmation_text: 'Application submitted via quick apply simulation.',
-      submitted_at: now,
-      created_at: now,
-      updated_at: now,
-      answers: [],
-      generated_documents: [],
-      artifacts: {},
-    }
-    await putCollectionItem(storage, userId, 'application', application.id, application)
-  }
+  await applyRunMetricTransition(
+    storage,
+    userId,
+    job.run_id,
+    existingApplication?.status || null,
+    application.status,
+    application.status === 'failed' ? 'apply_failed' : 'apply',
+  )
 
-  return c.json({ success: true })
+  return c.json({
+    success: application.status === 'submitted',
+    application_id: application.id,
+    status: application.status,
+    manual_action_id: manualActionId,
+    session_url: sessionUrl,
+    error_code: application.error_code,
+  })
 })
 
 app.delete('/api/jobs', async (c) => {
@@ -3253,7 +4286,67 @@ app.post('/api/manual-actions/:id/resolve', async (c) => {
     updated_at: nowIso(),
   }
   await putCollectionItem(storage, userId, 'manual-action', actionId, next)
+
+  if (next.status === 'resolved' && action.action_type === 'complete_application_submission') {
+    await finalizeManualSubmission(
+      storage,
+      userId,
+      action,
+      asObject(body.details),
+      null,
+      null,
+    )
+  }
+
   return c.json(next)
+})
+
+app.post('/api/manual-actions/:id/resolve-submitted', async (c) => {
+  const userId = c.get('userId')
+  const actionId = c.req.param('id')
+  const body = await c.req.json<{
+    confirmation_text?: string
+    submitted_at?: string
+    details?: JsonObject
+  }>()
+  const storage = storageFor(c)
+  const action = await getCollectionItem<ManualActionRecord>(storage, userId, 'manual-action', actionId)
+  if (!action) {
+    throw new HTTPException(404, { message: 'Manual action not found' })
+  }
+
+  if (action.action_type !== 'complete_application_submission') {
+    throw new HTTPException(400, { message: 'Only application submission manual actions support resolve-submitted' })
+  }
+
+  const details = {
+    ...asObject(action.details),
+    ...asObject(body.details),
+    submitted_confirmation: true,
+  }
+
+  const next: ManualActionRecord = {
+    ...action,
+    status: 'resolved',
+    details,
+    updated_at: nowIso(),
+  }
+  await putCollectionItem(storage, userId, 'manual-action', actionId, next)
+
+  const parsedSubmittedAt = parseIsoDate(body.submitted_at)
+  const application = await finalizeManualSubmission(
+    storage,
+    userId,
+    next,
+    details,
+    asString(body.confirmation_text).trim() || 'Application confirmed submitted by operator.',
+    parsedSubmittedAt,
+  )
+
+  return c.json({
+    action: next,
+    application,
+  })
 })
 
 app.post('/api/byok/steel/session', async (c) => {
@@ -3268,35 +4361,21 @@ app.post('/api/byok/steel/session', async (c) => {
     throw new HTTPException(400, { message: 'api_key is required for BYOK steel session creation' })
   }
 
-  const payload: JsonObject = {
-    metadata: asObject(body.metadata),
-  }
-  if (!Object.keys(payload.metadata as JsonObject).length) {
-    payload.metadata = { source: 'huntarr' }
-  }
-
   const projectId = asString(body.project_id).trim()
-  if (projectId) {
-    payload.projectId = projectId
+  const metadata = asObject(body.metadata)
+  if (!Object.keys(metadata).length) {
+    metadata.source = 'huntarr'
   }
 
-  const response = await fetch('https://api.steel.dev/v1/sessions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
-
-  if (!response.ok) {
-    const text = await response.text()
+  let session: JsonObject
+  try {
+    session = await createSteelSession(apiKey, projectId || null, metadata)
+  } catch (error) {
     throw new HTTPException(502, {
-      message: text || `Steel API failed with status ${response.status}`,
+      message: compactMessage(error instanceof Error ? error.message : 'Steel API request failed', 220),
     })
   }
 
-  const session = (await response.json()) as JsonObject
   return c.json({ ok: true, message: 'Steel key test succeeded', session })
 })
 

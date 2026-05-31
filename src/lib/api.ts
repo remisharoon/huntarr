@@ -228,6 +228,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ status: 'resolved', details: { source: 'ui' } }),
     }),
+  resolveManualSubmitted: (id: string, body?: Record<string, unknown>) =>
+    request(`/api/manual-actions/${id}/resolve-submitted`, {
+      method: 'POST',
+      body: JSON.stringify(body || { details: { source: 'ui' } }),
+    }),
   getProfile: () => request<Profile>('/api/profile'),
   saveProfile: (body: Profile) =>
     request<Profile>('/api/profile', { method: 'PUT', body: JSON.stringify(body) }),

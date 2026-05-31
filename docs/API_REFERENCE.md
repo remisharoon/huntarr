@@ -130,6 +130,59 @@ Supported source IDs:
 
 Run events include per-source fetch, warning, and failure details.
 
+### Job Apply
+
+- `POST /api/jobs/{id}/apply-now`
+
+Behavior:
+
+- Attempts ATS API auto-submit for supported portals (currently Lever and Greenhouse).
+- If auto-submit is not possible, creates a live Steel session (requires `steel.dev` credential).
+- Detects ATS provider from job URL when possible (Greenhouse, Lever, Workday, and others).
+- Stores profile-derived autofill payload into application artifacts.
+- Creates/updates a manual action for final submit confirmation.
+
+Response shape:
+
+```json
+{
+  "success": false,
+  "application_id": "app_...",
+  "status": "manual_required",
+  "manual_action_id": "manual_...",
+  "session_url": "https://app.steel.dev/...",
+  "error_code": null
+}
+```
+
+Possible `status` values:
+
+- `submitted` (auto-submitted via ATS API, already submitted, or marked submitted after manual resolution)
+- `manual_required` (live session created; operator confirmation required)
+- `failed` (could not initialize automation pipeline)
+
+### Manual Submission Confirmation
+
+- `POST /api/manual-actions/{id}/resolve-submitted`
+
+Body:
+
+```json
+{
+  "confirmation_text": "Submitted in ATS portal",
+  "submitted_at": "2026-05-31T18:02:11.000Z",
+  "details": {
+    "operator_note": "Verified thank-you page"
+  }
+}
+```
+
+Behavior:
+
+- Resolves the manual action.
+- Marks the linked application as `submitted`.
+- Updates linked job status to `applied`.
+
 ## Notes
 
 - This reference covers the currently implemented Pages Functions endpoints.
