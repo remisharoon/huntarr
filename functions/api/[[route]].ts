@@ -515,6 +515,44 @@ function compactMessage(value: string, maxLength = 140): string {
   return `${normalized.slice(0, maxLength - 3)}...`
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function parseModelList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => asString(entry).trim())
+      .filter(Boolean)
+  }
+
+  return asString(value)
+    .split(/[\n,]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+}
+
+function buildModelFallbackList(primaryModel: string, configuredValue: unknown): string[] {
+  const seen = new Set<string>()
+  seen.add(primaryModel.trim().toLowerCase())
+
+  const output: string[] = []
+  const candidates = [...parseModelList(configuredValue), ...DEFAULT_RESUME_EXTRACTION_FALLBACK_MODELS]
+  for (const candidate of candidates) {
+    const normalized = candidate.trim()
+    if (!normalized) continue
+    const key = normalized.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    output.push(normalized)
+    if (output.length >= RESUME_EXTRACTION_MAX_FALLBACK_MODELS) {
+      break
+    }
+  }
+
+  return output
+}
+
 function isValidUrl(value: string): boolean {
   try {
     const candidate = new URL(value)
@@ -1229,13 +1267,36 @@ type ResumeExtractionPass = {
   taskPrompt: string
 }
 
+type ResumeExtractionWarningCode =
+  | 'rate_limited'
+  | 'unauthorized'
+  | 'provider_unavailable'
+  | 'invalid_json'
+  | 'empty_response'
+  | 'provider_error'
+  | 'fallback_regex'
+  | 'unknown'
+
+type ResumePassFailure = {
+  passId: ResumeExtractionPass['id']
+  passLabel: string
+  code: ResumeExtractionWarningCode
+  message: string
+}
+
 type ResumeExtractionResult = {
   extracted: Partial<ProfileRecord>
   warnings: string[]
+  warningCodes: ResumeExtractionWarningCode[]
+  failedPasses: ResumeExtractionPass['id'][]
+  status: 'success' | 'partial' | 'fallback'
 }
 
 const RESUME_TEXT_CHAR_LIMIT = 32000
-const RESUME_EXTRACTION_ATTEMPTS_PER_PASS = 2
+const RESUME_EXTRACTION_ATTEMPTS_PER_PASS = 3
+const RESUME_EXTRACTION_RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504])
+const DEFAULT_RESUME_EXTRACTION_FALLBACK_MODELS = ['openrouter/auto']
+const RESUME_EXTRACTION_MAX_FALLBACK_MODELS = 3
 
 const RESUME_EXTRACTION_PASSES: ResumeExtractionPass[] = [
   {
@@ -1346,6 +1407,140 @@ function createExtractionUserPrompt(pass: ResumeExtractionPass, resumeText: stri
   return `${retryHint}${pass.taskPrompt}\n\nResume text:\n${resumeText}`
 }
 
+function parseStatusCodeFromMessage(message: string): number | null {
+  const directStatus = message.match(/\bstatus\s*[:=]\s*(\d{3})\b/i)
+  if (directStatus) {
+    const parsed = Number.parseInt(directStatus[1], 10)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  const codeField = message.match(/"code"\s*:\s*(\d{3})/i)
+  if (codeField) {
+    const parsed = Number.parseInt(codeField[1], 10)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  const httpStatus = message.match(/\bHTTP\s*(\d{3})\b/i)
+  if (httpStatus) {
+    const parsed = Number.parseInt(httpStatus[1], 10)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  return null
+}
+
+function classifyExtractionError(error: unknown): {
+  retryable: boolean
+  code: ResumeExtractionWarningCode
+  message: string
+} {
+  const rawMessage = error instanceof Error ? error.message : 'unknown error'
+  const message = compactMessage(rawMessage, 240)
+  const status = parseStatusCodeFromMessage(rawMessage)
+
+  if (status === 401 || status === 403 || /unauthorized|invalid api key|forbidden/i.test(rawMessage)) {
+    return { retryable: false, code: 'unauthorized', message }
+  }
+  if (status === 429 || /rate\s*limit|too\s*many\s*requests|quota/i.test(rawMessage)) {
+    return { retryable: true, code: 'rate_limited', message }
+  }
+  if (status != null && RESUME_EXTRACTION_RETRYABLE_STATUS.has(status)) {
+    return { retryable: true, code: 'provider_unavailable', message }
+  }
+  if (/valid json|json/i.test(rawMessage)) {
+    return { retryable: true, code: 'invalid_json', message }
+  }
+  if (/did not include content|no usable fields|empty/i.test(rawMessage)) {
+    return { retryable: true, code: 'empty_response', message }
+  }
+  if (/provider returned error|openrouter extraction failed/i.test(rawMessage)) {
+    return { retryable: true, code: 'provider_error', message }
+  }
+
+  return { retryable: false, code: 'unknown', message }
+}
+
+function retryDelayMs(attempt: number): number {
+  const base = 500
+  const exponential = base * 2 ** attempt
+  const jitter = Math.floor(Math.random() * 250)
+  return Math.min(6000, exponential + jitter)
+}
+
+function extractBestEmail(text: string): string {
+  const match = text.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i)
+  return match ? sanitizeString(match[0], 320) : ''
+}
+
+function extractBestPhone(text: string): string {
+  const candidates = text.match(/(?:\+?\d[\d\s().-]{7,}\d)/g) ?? []
+  for (const candidate of candidates) {
+    const digits = candidate.replace(/\D/g, '')
+    if (digits.length >= 10 && digits.length <= 15) {
+      return sanitizeString(candidate, 80)
+    }
+  }
+  return ''
+}
+
+function extractLinksFromText(text: string): Array<{ label: string; url: string }> {
+  const urlMatches = text.match(/https?:\/\/[^\s)]+/gi) ?? []
+  const output: Array<{ label: string; url: string }> = []
+  const seen = new Set<string>()
+  for (const raw of urlMatches) {
+    const candidate = sanitizeString(raw, 320)
+    if (!candidate) continue
+    const normalized = candidate.toLowerCase()
+    if (seen.has(normalized)) continue
+    if (!isValidUrl(candidate)) continue
+    seen.add(normalized)
+    let label = 'Portfolio'
+    if (/linkedin\.com/i.test(candidate)) label = 'LinkedIn'
+    else if (/github\.com/i.test(candidate)) label = 'GitHub'
+    else if (/gitlab\.com/i.test(candidate)) label = 'GitLab'
+    output.push({ label, url: candidate })
+    if (output.length >= 12) break
+  }
+  return output
+}
+
+function inferNameFromResumeText(text: string): string {
+  const lines = text
+    .split('\n')
+    .map((line) => sanitizeString(line, 120))
+    .filter(Boolean)
+  for (let i = 0; i < Math.min(lines.length, 12); i += 1) {
+    const line = lines[i]
+    if (line.length < 3 || line.length > 60) continue
+    if (/[@0-9]/.test(line)) continue
+    if (/resume|curriculum|vitae|profile|summary|experience|education/i.test(line)) continue
+    if (/[^a-zA-Z\s'.-]/.test(line)) continue
+    const words = line.split(/\s+/).filter(Boolean)
+    if (words.length >= 2 && words.length <= 5) {
+      return line
+    }
+  }
+  return ''
+}
+
+function extractProfileWithRegexFallback(resumeText: string): Partial<ProfileRecord> {
+  const extracted: Partial<ProfileRecord> = {}
+
+  const fullName = inferNameFromResumeText(resumeText)
+  if (fullName) extracted.full_name = fullName
+
+  const email = extractBestEmail(resumeText)
+  if (email) extracted.email = email
+
+  const phone = extractBestPhone(resumeText)
+  if (phone) extracted.phone = phone
+
+  const links = extractLinksFromText(resumeText)
+  if (links.length) extracted.links = links
+
+  return sanitizeExtractedProfile(extracted as JsonObject)
+}
+
 async function requestOpenRouterExtraction(
   apiKey: string,
   model: string,
@@ -1409,8 +1604,13 @@ async function runExtractionPass(
   model: string,
   resumeText: string,
   pass: ResumeExtractionPass,
-): Promise<Partial<ProfileRecord>> {
-  let lastError = 'no usable fields returned'
+): Promise<{ extracted: Partial<ProfileRecord> | null; failure: ResumePassFailure | null }> {
+  let lastError: ResumePassFailure = {
+    passId: pass.id,
+    passLabel: pass.label,
+    code: 'empty_response',
+    message: 'response contained no usable fields',
+  }
 
   for (let attempt = 0; attempt < RESUME_EXTRACTION_ATTEMPTS_PER_PASS; attempt += 1) {
     try {
@@ -1421,42 +1621,139 @@ async function runExtractionPass(
       })
       const extracted = sanitizeExtractedProfile(payload)
       if (Object.keys(extracted).length) {
-        return extracted
+        return { extracted, failure: null }
       }
-      lastError = 'response contained no usable fields'
+      lastError = {
+        passId: pass.id,
+        passLabel: pass.label,
+        code: 'empty_response',
+        message: 'response contained no usable fields',
+      }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : 'unknown error'
+      const classified = classifyExtractionError(error)
+      lastError = {
+        passId: pass.id,
+        passLabel: pass.label,
+        code: classified.code,
+        message: classified.message,
+      }
+      if (!classified.retryable) {
+        break
+      }
     }
-  }
 
-  throw new Error(`${pass.label} failed: ${compactMessage(lastError, 220)}`)
-}
-
-async function extractProfileWithOpenRouter(apiKey: string, model: string, resumeText: string): Promise<ResumeExtractionResult> {
-  const snippet = resumeText.slice(0, RESUME_TEXT_CHAR_LIMIT)
-  let merged: Partial<ProfileRecord> = {}
-  const passErrors: string[] = []
-
-  for (const pass of RESUME_EXTRACTION_PASSES) {
-    try {
-      const extracted = await runExtractionPass(apiKey, model, snippet, pass)
-      merged = mergeExtractedProfilePartials(merged, extracted)
-    } catch (error) {
-      passErrors.push(error instanceof Error ? error.message : `${pass.label} failed`)
+    if (attempt < RESUME_EXTRACTION_ATTEMPTS_PER_PASS - 1) {
+      await delay(retryDelayMs(attempt))
     }
-  }
-
-  merged = applyDerivedExtractionDefaults(merged)
-
-  if (!Object.keys(merged).length) {
-    const reason = passErrors.length ? ` (${passErrors.join(' | ')})` : ''
-    throw new Error(`AI profile extraction returned no usable fields${reason}`)
   }
 
   return {
-    extracted: merged,
-    warnings: passErrors,
+    extracted: null,
+    failure: lastError,
   }
+}
+
+function mapFailureToWarning(failure: ResumePassFailure): string {
+  const codeLabel: Record<ResumeExtractionWarningCode, string> = {
+    rate_limited: 'rate limited',
+    unauthorized: 'provider unauthorized',
+    provider_unavailable: 'provider unavailable',
+    invalid_json: 'invalid JSON response',
+    empty_response: 'empty response',
+    provider_error: 'provider error',
+    fallback_regex: 'regex fallback used',
+    unknown: 'unknown error',
+  }
+  return `${failure.passLabel}: ${codeLabel[failure.code]} - ${compactMessage(failure.message, 140)}`
+}
+
+function uniqueWarningCodes(codes: ResumeExtractionWarningCode[]): ResumeExtractionWarningCode[] {
+  const seen = new Set<string>()
+  const output: ResumeExtractionWarningCode[] = []
+  for (const code of codes) {
+    if (seen.has(code)) continue
+    seen.add(code)
+    output.push(code)
+  }
+  return output
+}
+
+function uniquePassIds(passes: ResumeExtractionPass['id'][]): ResumeExtractionPass['id'][] {
+  const seen = new Set<string>()
+  const output: ResumeExtractionPass['id'][] = []
+  for (const pass of passes) {
+    if (seen.has(pass)) continue
+    seen.add(pass)
+    output.push(pass)
+  }
+  return output
+}
+
+async function extractProfileWithOpenRouter(
+  apiKey: string,
+  model: string,
+  resumeText: string,
+  fallbackModels: string[] = [],
+): Promise<ResumeExtractionResult> {
+  const snippet = resumeText.slice(0, RESUME_TEXT_CHAR_LIMIT)
+  const modelCandidates = [model, ...fallbackModels]
+  const allFailures: ResumePassFailure[] = []
+
+  for (let modelIndex = 0; modelIndex < modelCandidates.length; modelIndex += 1) {
+    const activeModel = modelCandidates[modelIndex]
+    let merged: Partial<ProfileRecord> = {}
+    const modelFailures: ResumePassFailure[] = []
+
+    for (const pass of RESUME_EXTRACTION_PASSES) {
+      const result = await runExtractionPass(apiKey, activeModel, snippet, pass)
+      if (result.extracted) {
+        merged = mergeExtractedProfilePartials(merged, result.extracted)
+      } else if (result.failure) {
+        modelFailures.push(result.failure)
+      }
+    }
+
+    merged = applyDerivedExtractionDefaults(merged)
+
+    if (Object.keys(merged).length) {
+      const warnings: string[] = modelFailures.map(mapFailureToWarning)
+      const warningCodes: ResumeExtractionWarningCode[] = modelFailures.map((failure) => failure.code)
+      if (modelIndex > 0) {
+        warnings.push(`Model fallback used: switched to ${activeModel}`)
+        warningCodes.push('provider_unavailable')
+      }
+
+      return {
+        extracted: merged,
+        warnings,
+        warningCodes: uniqueWarningCodes(warningCodes),
+        failedPasses: modelFailures.map((failure) => failure.passId),
+        status: modelFailures.length ? 'partial' : 'success',
+      }
+    }
+
+    allFailures.push(...modelFailures)
+  }
+
+  const regexFallback = extractProfileWithRegexFallback(snippet)
+  if (Object.keys(regexFallback).length) {
+    const fallbackWarnings = allFailures.map(mapFailureToWarning)
+    fallbackWarnings.push('LLM extraction unavailable, used regex fallback for basic fields')
+    return {
+      extracted: regexFallback,
+      warnings: fallbackWarnings,
+      warningCodes: uniqueWarningCodes([...allFailures.map((failure) => failure.code), 'fallback_regex']),
+      failedPasses: uniquePassIds(allFailures.map((failure) => failure.passId)),
+      status: 'fallback',
+    }
+  }
+
+  if (allFailures.length) {
+    const reasons = allFailures.map(mapFailureToWarning).join(' | ')
+    throw new Error(`AI profile extraction returned no usable fields (${compactMessage(reasons, 420)})`)
+  }
+
+  throw new Error('AI profile extraction returned no usable fields')
 }
 
 async function readCredential(storage: Storage, userId: string, domain: string, username = 'default'): Promise<CredentialRecord | null> {
@@ -2162,6 +2459,7 @@ app.post('/api/profile/import-resume', async (c) => {
   const storage = storageFor(c)
   const config = asObject(await storage.get(userConfigKey(userId, 'default')))
   const openRouterModel = asString(config.openrouter_model).trim() || 'openrouter/free'
+  const openRouterFallbackModels = buildModelFallbackList(openRouterModel, config.openrouter_resume_fallback_models)
   const openRouterCred = await readCredential(storage, userId, 'openrouter.ai')
   const openRouterApiKey = asString(openRouterCred?.password).trim()
 
@@ -2178,7 +2476,7 @@ app.post('/api/profile/import-resume', async (c) => {
 
   let extractionResult: ResumeExtractionResult
   try {
-    extractionResult = await extractProfileWithOpenRouter(openRouterApiKey, openRouterModel, resumeText)
+    extractionResult = await extractProfileWithOpenRouter(openRouterApiKey, openRouterModel, resumeText, openRouterFallbackModels)
   } catch (error) {
     throw new HTTPException(502, {
       message: `AI profile extraction failed: ${compactMessage(error instanceof Error ? error.message : 'unknown error', 220)}`,
@@ -2202,6 +2500,9 @@ app.post('/api/profile/import-resume', async (c) => {
     ...extracted,
     resume_path: resumePath,
     extraction_warnings: extractionWarnings,
+    extraction_status: extractionResult.status,
+    extraction_warning_codes: extractionResult.warningCodes,
+    extraction_failed_passes: extractionResult.failedPasses,
   })
 })
 

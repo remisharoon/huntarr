@@ -20,6 +20,18 @@ export type HuntPreflightResponse = {
 
 export type ResumeImportResponse = Partial<Profile> & {
   extraction_warnings?: string[]
+  extraction_status?: 'success' | 'partial' | 'fallback'
+  extraction_warning_codes?: Array<
+    | 'rate_limited'
+    | 'unauthorized'
+    | 'provider_unavailable'
+    | 'invalid_json'
+    | 'empty_response'
+    | 'provider_error'
+    | 'fallback_regex'
+    | 'unknown'
+  >
+  extraction_failed_passes?: Array<'identity' | 'summary' | 'career' | 'portfolio'>
 }
 
 type ApiErrorInit = {
@@ -109,7 +121,13 @@ function buildErrorHint(status: number, message: string): string | undefined {
   if (status === 401) {
     return 'Sign in again. If this continues, verify Clerk JWT settings in Cloudflare Pages.'
   }
+  if (status === 429 || /rate\s*limit|too\s*many\s*requests|quota/i.test(message)) {
+    return 'OpenRouter is rate-limited or quota-limited. Retry shortly, switch to a different model, or increase provider limits.'
+  }
   if (status >= 500) {
+    if (/openrouter|provider returned error|code":\s*429|too many requests|rate\s*limit/i.test(message)) {
+      return 'OpenRouter provider is currently unavailable or rate-limited. Retry shortly or switch to a less-congested model.'
+    }
     return 'Check required backend services and env vars (Pages Functions, Neon, Clerk) and then redeploy.'
   }
   if (status === 0) {

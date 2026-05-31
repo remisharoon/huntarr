@@ -14,6 +14,15 @@ import type {
   ProfileProject,
 } from '../types'
 
+type ExtractionPassId = 'identity' | 'summary' | 'career' | 'portfolio'
+
+const EXTRACTION_PASS_LABELS: Record<ExtractionPassId, string> = {
+  identity: 'Identity',
+  summary: 'Summary',
+  career: 'Experience & Education',
+  portfolio: 'Projects & Credentials',
+}
+
 type ProfilePageProps = {
   profile: Profile | null
   onSave: (payload: Profile) => Promise<void>
@@ -164,6 +173,8 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
   const [resumeFileName, setResumeFileName] = useState('')
   const [resumeError, setResumeError] = useState('')
   const [resumeWarnings, setResumeWarnings] = useState<string[]>([])
+  const [resumeExtractionStatus, setResumeExtractionStatus] = useState<'success' | 'partial' | 'fallback'>('success')
+  const [resumeFailedPasses, setResumeFailedPasses] = useState<ExtractionPassId[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const hasImportedRef = useRef(false)
 
@@ -190,18 +201,36 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
     setResumeStatus('uploading')
     setResumeError('')
     setResumeWarnings([])
+    setResumeFailedPasses([])
+    setResumeExtractionStatus('success')
     try {
       const extracted = await api.importResume(file)
       const extractionWarnings = Array.isArray(extracted.extraction_warnings)
         ? extracted.extraction_warnings.map((entry) => asString(entry).trim()).filter(Boolean)
         : []
-      const { extraction_warnings: _unused, ...profilePatch } = extracted
+      const extractionStatus = extracted.extraction_status === 'partial' || extracted.extraction_status === 'fallback' ? extracted.extraction_status : 'success'
+      const failedPasses = Array.isArray(extracted.extraction_failed_passes)
+        ? extracted.extraction_failed_passes
+            .map((entry) => asString(entry).trim())
+            .filter((entry): entry is ExtractionPassId => entry in EXTRACTION_PASS_LABELS)
+        : []
+      const {
+        extraction_warnings: _unusedWarnings,
+        extraction_status: _unusedStatus,
+        extraction_warning_codes: _unusedWarningCodes,
+        extraction_failed_passes: _unusedFailedPasses,
+        ...profilePatch
+      } = extracted
       hasImportedRef.current = true
       setForm((prev) => normalizeProfile({ ...prev, ...profilePatch }))
       setResumeWarnings(extractionWarnings)
+      setResumeFailedPasses(failedPasses)
+      setResumeExtractionStatus(extractionStatus)
       setResumeStatus('done')
     } catch (err: any) {
       setResumeWarnings([])
+      setResumeFailedPasses([])
+      setResumeExtractionStatus('success')
       setResumeError(err?.message ?? 'Upload failed')
       setResumeStatus('error')
     }
@@ -284,11 +313,25 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
             <Sparkles size={12} /> AI profile extraction
           </Badge>
           {resumeStatus === 'uploading' && <span className="text-sm text-gray-600 dark:text-gray-400">Extracting identity, experience, education, skills, achievements, and links...</span>}
-          {resumeStatus === 'done' && <span className="text-sm text-green-700 dark:text-green-300">Profile refreshed from {resumeFileName}</span>}
+          {resumeStatus === 'done' && (
+            <span className="text-sm text-green-700 dark:text-green-300">
+              Profile refreshed from {resumeFileName}
+              {resumeExtractionStatus === 'fallback' ? ' (basic fallback mode)' : ''}
+            </span>
+          )}
           {resumeStatus === 'done' && resumeWarnings.length > 0 ? (
             <span className="text-sm text-amber-700 dark:text-amber-300">
               Partial extraction: {resumeWarnings.join(' | ')}
             </span>
+          ) : null}
+          {resumeStatus === 'done' && resumeFailedPasses.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {resumeFailedPasses.map((passId) => (
+                <Badge key={passId} tone="warning">
+                  {EXTRACTION_PASS_LABELS[passId]} needs review
+                </Badge>
+              ))}
+            </div>
           ) : null}
           {resumeStatus === 'error' && <span className="text-sm text-red-700 dark:text-red-300">{resumeError}</span>}
         </div>
