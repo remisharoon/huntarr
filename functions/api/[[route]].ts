@@ -1284,6 +1284,24 @@ type ResumePassFailure = {
   message: string
 }
 
+type ExtractedProfileField =
+  | 'full_name'
+  | 'email'
+  | 'phone'
+  | 'location'
+  | 'desired_job_title'
+  | 'desired_location'
+  | 'years_experience'
+  | 'summary'
+  | 'skills'
+  | 'experience'
+  | 'education'
+  | 'awards'
+  | 'certifications'
+  | 'projects'
+  | 'languages'
+  | 'links'
+
 type ResumeExtractionResult = {
   extracted: Partial<ProfileRecord>
   warnings: string[]
@@ -1336,6 +1354,165 @@ const RESUME_EXTRACTION_PASSES: ResumeExtractionPass[] = [
       'Step 1: extract projects, awards, and certifications from dedicated sections. Step 2: capture languages and proficiency levels. Step 3: capture external links (portfolio, LinkedIn, GitHub, personal site) with meaningful labels.',
   },
 ]
+
+const EXTRACTION_PASS_FIELDS: Record<ResumeExtractionPass['id'], ExtractedProfileField[]> = {
+  identity: ['full_name', 'email', 'phone', 'location', 'desired_job_title', 'desired_location'],
+  summary: ['years_experience', 'summary', 'skills'],
+  career: ['experience', 'education'],
+  portfolio: ['awards', 'certifications', 'projects', 'languages', 'links'],
+}
+
+const RESUME_EXTRACTION_PASS_IDS = new Set<ResumeExtractionPass['id']>(RESUME_EXTRACTION_PASSES.map((pass) => pass.id))
+
+function getExtractionPassLabel(passId: ResumeExtractionPass['id']): string {
+  const found = RESUME_EXTRACTION_PASSES.find((pass) => pass.id === passId)
+  return found?.label || passId
+}
+
+function parseRequestedExtractionPasses(value: unknown): ResumeExtractionPass['id'][] {
+  const entries = Array.isArray(value) ? value : [value]
+  const output: ResumeExtractionPass['id'][] = []
+  const seen = new Set<string>()
+
+  for (const entry of entries) {
+    if (typeof entry !== 'string') continue
+    const tokens = entry
+      .split(/[\s,]+/)
+      .map((token) => token.trim().toLowerCase())
+      .filter(Boolean)
+    for (const token of tokens) {
+      if (!RESUME_EXTRACTION_PASS_IDS.has(token as ResumeExtractionPass['id'])) continue
+      if (seen.has(token)) continue
+      seen.add(token)
+      output.push(token as ResumeExtractionPass['id'])
+    }
+  }
+
+  return output
+}
+
+function hasExtractedFieldValue(extracted: Partial<ProfileRecord>, field: ExtractedProfileField): boolean {
+  const value = extracted[field]
+  if (Array.isArray(value)) {
+    return value.length > 0
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value >= 0
+  }
+  if (typeof value === 'string') {
+    return Boolean(value.trim())
+  }
+  return value != null
+}
+
+function findPassesNeedingRecovery(
+  extracted: Partial<ProfileRecord>,
+  failedPasses: ResumeExtractionPass['id'][],
+): ResumeExtractionPass['id'][] {
+  const output: ResumeExtractionPass['id'][] = []
+  for (const passId of uniquePassIds(failedPasses)) {
+    const passFields = EXTRACTION_PASS_FIELDS[passId] || []
+    const hasAnyField = passFields.some((field) => hasExtractedFieldValue(extracted, field))
+    if (!hasAnyField) {
+      output.push(passId)
+    }
+  }
+  return output
+}
+
+function filterExtractedProfileByPasses(
+  extracted: Partial<ProfileRecord>,
+  passIds: ResumeExtractionPass['id'][],
+): Partial<ProfileRecord> {
+  const uniquePasses = uniquePassIds(passIds)
+  if (!uniquePasses.length) {
+    return extracted
+  }
+
+  const allowedFields = new Set<ExtractedProfileField>()
+  for (const passId of uniquePasses) {
+    for (const field of EXTRACTION_PASS_FIELDS[passId] || []) {
+      allowedFields.add(field)
+    }
+  }
+
+  const next: Partial<ProfileRecord> = {}
+  for (const field of allowedFields) {
+    const value = extracted[field]
+    if (!hasExtractedFieldValue(extracted, field)) continue
+    ;(next as any)[field] = value
+  }
+
+  return next
+}
+
+function buildRecoverySystemPrompt(passIds: ResumeExtractionPass['id'][]): string {
+  const requestedFields = uniquePassIds(passIds).flatMap((passId) => EXTRACTION_PASS_FIELDS[passId])
+  const uniqueFieldList = Array.from(new Set(requestedFields))
+  return [
+    'You repair missing resume extraction sections.',
+    'Think step by step internally but output JSON only.',
+    `Return a JSON object using only these top-level keys when present: ${uniqueFieldList.join(', ')}.`,
+    'Schema rules:',
+    '- Experience item: { title, company, start, end, description }',
+    '- Education item: { degree, institution, year, description }',
+    '- Awards item: { title, issuer, year, description }',
+    '- Certifications item: { name, issuer, year, credential_id, url }',
+    '- Projects item: { name, role, start, end, description, url, tech_stack }',
+    '- Languages item: { name, proficiency }',
+    '- Links item: { label, url }',
+    'Use strings for scalar fields and arrays for list fields. Do not include markdown fences.',
+  ].join('\n')
+}
+
+function buildRecoveryUserPrompt(passIds: ResumeExtractionPass['id'][], resumeText: string, isRetry: boolean): string {
+  const requestedLabels = passIds.map((passId) => getExtractionPassLabel(passId)).join(', ')
+  const retryLine = isRetry
+    ? 'Retry mode: previous output was empty or invalid. Follow schema exactly and return JSON only.\n\n'
+    : ''
+  return `${retryLine}Re-extract these sections from the resume: ${requestedLabels}. Return only requested keys with evidence-backed values.\n\nResume text:\n${resumeText}`
+}
+
+async function runRecoveryExtraction(
+  apiKey: string,
+  model: string,
+  resumeText: string,
+  passIds: ResumeExtractionPass['id'][],
+): Promise<Partial<ProfileRecord> | null> {
+  const uniquePasses = uniquePassIds(passIds)
+  if (!uniquePasses.length) return null
+
+  const requestedPasses = RESUME_EXTRACTION_PASSES.filter((pass) => uniquePasses.includes(pass.id))
+  const maxTokens = Math.min(
+    2200,
+    Math.max(
+      700,
+      requestedPasses.reduce((total, pass) => total + pass.maxTokens, 0),
+    ),
+  )
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const payload = await requestOpenRouterExtraction(apiKey, model, {
+        systemPrompt: buildRecoverySystemPrompt(uniquePasses),
+        userPrompt: buildRecoveryUserPrompt(uniquePasses, resumeText, attempt > 0),
+        maxTokens,
+      })
+      const extracted = sanitizeExtractedProfile(payload)
+      if (Object.keys(extracted).length) {
+        return extracted
+      }
+    } catch {
+      // Ignore recovery errors and continue with fallback behavior.
+    }
+
+    if (attempt < 1) {
+      await delay(retryDelayMs(attempt))
+    }
+  }
+
+  return null
+}
 
 function mergeExtractedProfilePartials(
   current: Partial<ProfileRecord>,
@@ -1694,9 +1871,14 @@ async function extractProfileWithOpenRouter(
   model: string,
   resumeText: string,
   fallbackModels: string[] = [],
+  requestedPasses: ResumeExtractionPass['id'][] = [],
 ): Promise<ResumeExtractionResult> {
   const snippet = resumeText.slice(0, RESUME_TEXT_CHAR_LIMIT)
   const modelCandidates = [model, ...fallbackModels]
+  const normalizedRequestedPasses = uniquePassIds(requestedPasses)
+  const extractionPasses = normalizedRequestedPasses.length
+    ? RESUME_EXTRACTION_PASSES.filter((pass) => normalizedRequestedPasses.includes(pass.id))
+    : RESUME_EXTRACTION_PASSES
   const allFailures: ResumePassFailure[] = []
 
   for (let modelIndex = 0; modelIndex < modelCandidates.length; modelIndex += 1) {
@@ -1704,7 +1886,7 @@ async function extractProfileWithOpenRouter(
     let merged: Partial<ProfileRecord> = {}
     const modelFailures: ResumePassFailure[] = []
 
-    for (const pass of RESUME_EXTRACTION_PASSES) {
+    for (const pass of extractionPasses) {
       const result = await runExtractionPass(apiKey, activeModel, snippet, pass)
       if (result.extracted) {
         merged = mergeExtractedProfilePartials(merged, result.extracted)
@@ -1714,10 +1896,28 @@ async function extractProfileWithOpenRouter(
     }
 
     merged = applyDerivedExtractionDefaults(merged)
+    if (normalizedRequestedPasses.length) {
+      merged = filterExtractedProfileByPasses(merged, normalizedRequestedPasses)
+    }
+
+    const failedPassIds = uniquePassIds(modelFailures.map((failure) => failure.passId))
+    const passesNeedingRecovery = findPassesNeedingRecovery(merged, failedPassIds)
+    if (passesNeedingRecovery.length) {
+      const recovered = await runRecoveryExtraction(apiKey, activeModel, snippet, passesNeedingRecovery)
+      if (recovered && Object.keys(recovered).length) {
+        merged = applyDerivedExtractionDefaults(mergeExtractedProfilePartials(merged, recovered))
+        if (normalizedRequestedPasses.length) {
+          merged = filterExtractedProfileByPasses(merged, normalizedRequestedPasses)
+        }
+      }
+    }
 
     if (Object.keys(merged).length) {
       const warnings: string[] = modelFailures.map(mapFailureToWarning)
       const warningCodes: ResumeExtractionWarningCode[] = modelFailures.map((failure) => failure.code)
+      if (passesNeedingRecovery.length) {
+        warnings.push(`Recovery extraction used for: ${passesNeedingRecovery.map(getExtractionPassLabel).join(', ')}`)
+      }
       if (modelIndex > 0) {
         warnings.push(`Model fallback used: switched to ${activeModel}`)
         warningCodes.push('provider_unavailable')
@@ -1735,7 +1935,10 @@ async function extractProfileWithOpenRouter(
     allFailures.push(...modelFailures)
   }
 
-  const regexFallback = extractProfileWithRegexFallback(snippet)
+  let regexFallback = extractProfileWithRegexFallback(snippet)
+  if (normalizedRequestedPasses.length) {
+    regexFallback = filterExtractedProfileByPasses(regexFallback, normalizedRequestedPasses)
+  }
   if (Object.keys(regexFallback).length) {
     const fallbackWarnings = allFailures.map(mapFailureToWarning)
     fallbackWarnings.push('LLM extraction unavailable, used regex fallback for basic fields')
@@ -2447,6 +2650,7 @@ app.post('/api/profile/import-resume', async (c) => {
   const userId = c.get('userId')
   const formData = await c.req.formData()
   const input = formData.get('file')
+  const requestedPasses = parseRequestedExtractionPasses(formData.getAll('passes'))
   if (!(input instanceof File)) {
     throw new HTTPException(400, { message: 'file is required' })
   }
@@ -2476,7 +2680,13 @@ app.post('/api/profile/import-resume', async (c) => {
 
   let extractionResult: ResumeExtractionResult
   try {
-    extractionResult = await extractProfileWithOpenRouter(openRouterApiKey, openRouterModel, resumeText, openRouterFallbackModels)
+    extractionResult = await extractProfileWithOpenRouter(
+      openRouterApiKey,
+      openRouterModel,
+      resumeText,
+      openRouterFallbackModels,
+      requestedPasses,
+    )
   } catch (error) {
     throw new HTTPException(502, {
       message: `AI profile extraction failed: ${compactMessage(error instanceof Error ? error.message : 'unknown error', 220)}`,

@@ -34,6 +34,8 @@ export type ResumeImportResponse = Partial<Profile> & {
   extraction_failed_passes?: Array<'identity' | 'summary' | 'career' | 'portfolio'>
 }
 
+export type ResumeExtractionPassId = 'identity' | 'summary' | 'career' | 'portfolio'
+
 type ApiErrorInit = {
   message: string
   status: number
@@ -246,9 +248,12 @@ export const api = {
     request('/api/credentials', { method: 'POST', body: JSON.stringify(body) }),
   createSteelSession: (body: Record<string, unknown>) =>
     request('/api/byok/steel/session', { method: 'POST', body: JSON.stringify(body) }),
-  importResume: (file: File): Promise<ResumeImportResponse> => {
+  importResume: (file: File, options?: { passes?: ResumeExtractionPassId[] }): Promise<ResumeImportResponse> => {
     const fd = new FormData()
     fd.append('file', file)
+    if (options?.passes?.length) {
+      fd.append('passes', options.passes.join(','))
+    }
     const send = async () => {
       const authToken = authTokenResolver ? await authTokenResolver() : null
       const headers = new Headers()

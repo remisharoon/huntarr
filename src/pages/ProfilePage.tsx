@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { FileText, Plus, Sparkles, Trash2, UploadCloud } from 'lucide-react'
 
 import { Badge, Button, Card, IconButton, Input, PageHeader, TextArea } from '../components/ui'
-import { api } from '../lib/api'
+import { api, type ResumeExtractionPassId } from '../lib/api'
 import type {
   Profile,
   ProfileAward,
@@ -14,7 +14,7 @@ import type {
   ProfileProject,
 } from '../types'
 
-type ExtractionPassId = 'identity' | 'summary' | 'career' | 'portfolio'
+type ExtractionPassId = ResumeExtractionPassId
 
 const EXTRACTION_PASS_LABELS: Record<ExtractionPassId, string> = {
   identity: 'Identity',
@@ -22,6 +22,11 @@ const EXTRACTION_PASS_LABELS: Record<ExtractionPassId, string> = {
   career: 'Experience & Education',
   portfolio: 'Projects & Credentials',
 }
+
+const IDENTITY_EXTRACTION_PASSES: ResumeExtractionPassId[] = ['identity']
+const SUMMARY_EXTRACTION_PASSES: ResumeExtractionPassId[] = ['summary']
+const CAREER_EXTRACTION_PASSES: ResumeExtractionPassId[] = ['career']
+const PORTFOLIO_EXTRACTION_PASSES: ResumeExtractionPassId[] = ['portfolio']
 
 type ProfilePageProps = {
   profile: Profile | null
@@ -175,7 +180,11 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
   const [resumeWarnings, setResumeWarnings] = useState<string[]>([])
   const [resumeExtractionStatus, setResumeExtractionStatus] = useState<'success' | 'partial' | 'fallback'>('success')
   const [resumeFailedPasses, setResumeFailedPasses] = useState<ExtractionPassId[]>([])
+  const [pendingResumePasses, setPendingResumePasses] = useState<ResumeExtractionPassId[] | null>(null)
+  const [pendingResumeActionLabel, setPendingResumeActionLabel] = useState('AI profile extraction')
+  const [activeResumeActionLabel, setActiveResumeActionLabel] = useState('AI profile extraction')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const lastImportedResumeRef = useRef<File | null>(null)
   const hasImportedRef = useRef(false)
 
   useEffect(() => {
@@ -196,15 +205,28 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
     return Math.round((checks.filter(Boolean).length / checks.length) * 100)
   }, [form])
 
-  const handleResumeUpload = async (file: File) => {
+  const openResumePicker = (options?: { passes?: ResumeExtractionPassId[]; label?: string }) => {
+    const label = options?.label?.trim() || 'AI profile extraction'
+    const passes = options?.passes?.length ? [...options.passes] : null
+    setPendingResumePasses(passes)
+    setPendingResumeActionLabel(label)
+    fileInputRef.current?.click()
+  }
+
+  const handleResumeUpload = async (
+    file: File,
+    options?: { passes?: ResumeExtractionPassId[]; label?: string },
+  ) => {
+    const actionLabel = options?.label?.trim() || (options?.passes?.length ? 'Focused AI extraction' : 'AI profile extraction')
     setResumeFileName(file.name)
     setResumeStatus('uploading')
+    setActiveResumeActionLabel(actionLabel)
     setResumeError('')
     setResumeWarnings([])
     setResumeFailedPasses([])
     setResumeExtractionStatus('success')
     try {
-      const extracted = await api.importResume(file)
+      const extracted = await api.importResume(file, options?.passes?.length ? { passes: options.passes } : undefined)
       const extractionWarnings = Array.isArray(extracted.extraction_warnings)
         ? extracted.extraction_warnings.map((entry) => asString(entry).trim()).filter(Boolean)
         : []
@@ -235,6 +257,27 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
       setResumeStatus('error')
     }
   }
+
+  const runResumeExtraction = (options?: { passes?: ResumeExtractionPassId[]; label?: string }) => {
+    const label = options?.label?.trim() || 'AI profile extraction'
+    const passes = options?.passes?.length ? options.passes : undefined
+    if (lastImportedResumeRef.current) {
+      void handleResumeUpload(lastImportedResumeRef.current, { passes, label })
+      return
+    }
+    openResumePicker({ passes, label })
+  }
+
+  const renderSectionExtractionButton = (passes: ResumeExtractionPassId[], label: string) => (
+    <Button
+      type="button"
+      variant="secondary"
+      disabled={resumeStatus === 'uploading'}
+      onClick={() => runResumeExtraction({ passes, label })}
+    >
+      <Sparkles size={14} /> AI extraction
+    </Button>
+  )
 
   const updateSectionItem = (key: ListSectionKey, index: number, item: unknown) => {
     setForm((prev) => {
@@ -293,8 +336,15 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
           accept=".pdf"
           className="hidden"
           onChange={(e) => {
+            const queuedPasses = pendingResumePasses ? [...pendingResumePasses] : undefined
+            const queuedLabel = pendingResumeActionLabel
+            setPendingResumePasses(null)
+            setPendingResumeActionLabel('AI profile extraction')
             const file = e.target.files?.[0]
-            if (file) handleResumeUpload(file)
+            if (file) {
+              lastImportedResumeRef.current = file
+              void handleResumeUpload(file, { passes: queuedPasses, label: queuedLabel })
+            }
             e.target.value = ''
           }}
         />
@@ -304,18 +354,27 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
             variant="attention"
             className="resume-upload-button"
             disabled={resumeStatus === 'uploading'}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => openResumePicker({ label: 'AI profile extraction' })}
           >
             <UploadCloud size={16} />
             {resumeStatus === 'uploading' ? 'Parsing resume...' : 'Upload PDF Resume'}
           </Button>
-          <Badge tone="info" className="gap-1">
-            <Sparkles size={12} /> AI profile extraction
-          </Badge>
-          {resumeStatus === 'uploading' && <span className="text-sm text-gray-600 dark:text-gray-400">Extracting identity, experience, education, skills, achievements, and links...</span>}
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={resumeStatus === 'uploading'}
+            onClick={() => runResumeExtraction({ label: 'AI profile extraction' })}
+          >
+            <Sparkles size={14} /> AI profile extraction
+          </Button>
+          {resumeStatus === 'uploading' && (
+            <span className="text-sm text-gray-600 dark:text-gray-400">
+              {activeResumeActionLabel} in progress. Extracting identity, experience, education, skills, achievements, and links...
+            </span>
+          )}
           {resumeStatus === 'done' && (
             <span className="text-sm text-green-700 dark:text-green-300">
-              Profile refreshed from {resumeFileName}
+              {activeResumeActionLabel} completed from {resumeFileName}
               {resumeExtractionStatus === 'fallback' ? ' (basic fallback mode)' : ''}
             </span>
           )}
@@ -416,7 +475,10 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
       </Card>
 
       <Card className="space-y-4">
-        <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Identity</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Identity</h2>
+          {renderSectionExtractionButton(IDENTITY_EXTRACTION_PASSES, 'Identity extraction')}
+        </div>
         <div className="grid gap-3 md:grid-cols-2">
           <Input
             placeholder="Full name"
@@ -449,7 +511,10 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
       </Card>
 
       <Card className="space-y-4">
-        <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Job Preferences</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Job Preferences</h2>
+          {renderSectionExtractionButton(IDENTITY_EXTRACTION_PASSES, 'Job preferences extraction')}
+        </div>
         <p className="text-sm text-gray-600 dark:text-gray-400">Used for job discovery when starting hunts. Override defaults from resume if needed.</p>
         <div className="grid gap-3 md:grid-cols-2">
           <div>
@@ -476,7 +541,10 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
       </Card>
 
       <Card className="space-y-4">
-        <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Professional Summary</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Professional Summary</h2>
+          {renderSectionExtractionButton(SUMMARY_EXTRACTION_PASSES, 'Summary extraction')}
+        </div>
         <Input
           placeholder="Skills (comma separated)"
           value={form.skills.join(', ')}
@@ -493,9 +561,12 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Experience</h2>
-          <Button type="button" variant="secondary" onClick={() => addSectionItem('experience')}>
-            <Plus size={14} /> Add
-          </Button>
+          <div className="flex items-center gap-2">
+            {renderSectionExtractionButton(CAREER_EXTRACTION_PASSES, 'Experience and education extraction')}
+            <Button type="button" variant="secondary" onClick={() => addSectionItem('experience')}>
+              <Plus size={14} /> Add
+            </Button>
+          </div>
         </div>
         {form.experience.length === 0 ? <p className="text-sm text-gray-600 dark:text-gray-400">No experience entries yet.</p> : null}
         {form.experience.map((item, index) => (
@@ -519,9 +590,12 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Education</h2>
-          <Button type="button" variant="secondary" onClick={() => addSectionItem('education')}>
-            <Plus size={14} /> Add
-          </Button>
+          <div className="flex items-center gap-2">
+            {renderSectionExtractionButton(CAREER_EXTRACTION_PASSES, 'Experience and education extraction')}
+            <Button type="button" variant="secondary" onClick={() => addSectionItem('education')}>
+              <Plus size={14} /> Add
+            </Button>
+          </div>
         </div>
         {form.education.length === 0 ? <p className="text-sm text-gray-600 dark:text-gray-400">No education entries yet.</p> : null}
         {form.education.map((item, index) => (
@@ -544,9 +618,12 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Projects</h2>
-          <Button type="button" variant="secondary" onClick={() => addSectionItem('projects')}>
-            <Plus size={14} /> Add
-          </Button>
+          <div className="flex items-center gap-2">
+            {renderSectionExtractionButton(PORTFOLIO_EXTRACTION_PASSES, 'Projects and credentials extraction')}
+            <Button type="button" variant="secondary" onClick={() => addSectionItem('projects')}>
+              <Plus size={14} /> Add
+            </Button>
+          </div>
         </div>
         {form.projects.length === 0 ? <p className="text-sm text-gray-600 dark:text-gray-400">No projects entries yet.</p> : null}
         {form.projects.map((item, index) => (
@@ -577,9 +654,12 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Awards</h2>
-          <Button type="button" variant="secondary" onClick={() => addSectionItem('awards')}>
-            <Plus size={14} /> Add
-          </Button>
+          <div className="flex items-center gap-2">
+            {renderSectionExtractionButton(PORTFOLIO_EXTRACTION_PASSES, 'Projects and credentials extraction')}
+            <Button type="button" variant="secondary" onClick={() => addSectionItem('awards')}>
+              <Plus size={14} /> Add
+            </Button>
+          </div>
         </div>
         {form.awards.length === 0 ? <p className="text-sm text-gray-600 dark:text-gray-400">No award entries yet.</p> : null}
         {form.awards.map((item, index) => (
@@ -602,9 +682,12 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Certifications</h2>
-          <Button type="button" variant="secondary" onClick={() => addSectionItem('certifications')}>
-            <Plus size={14} /> Add
-          </Button>
+          <div className="flex items-center gap-2">
+            {renderSectionExtractionButton(PORTFOLIO_EXTRACTION_PASSES, 'Projects and credentials extraction')}
+            <Button type="button" variant="secondary" onClick={() => addSectionItem('certifications')}>
+              <Plus size={14} /> Add
+            </Button>
+          </div>
         </div>
         {form.certifications.length === 0 ? <p className="text-sm text-gray-600 dark:text-gray-400">No certification entries yet.</p> : null}
         {form.certifications.map((item, index) => (
@@ -628,9 +711,12 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Languages</h2>
-          <Button type="button" variant="secondary" onClick={() => addSectionItem('languages')}>
-            <Plus size={14} /> Add
-          </Button>
+          <div className="flex items-center gap-2">
+            {renderSectionExtractionButton(PORTFOLIO_EXTRACTION_PASSES, 'Projects and credentials extraction')}
+            <Button type="button" variant="secondary" onClick={() => addSectionItem('languages')}>
+              <Plus size={14} /> Add
+            </Button>
+          </div>
         </div>
         {form.languages.length === 0 ? <p className="text-sm text-gray-600 dark:text-gray-400">No language entries yet.</p> : null}
         {form.languages.map((item, index) => (
@@ -651,9 +737,12 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Links</h2>
-          <Button type="button" variant="secondary" onClick={() => addSectionItem('links')}>
-            <Plus size={14} /> Add
-          </Button>
+          <div className="flex items-center gap-2">
+            {renderSectionExtractionButton(PORTFOLIO_EXTRACTION_PASSES, 'Projects and credentials extraction')}
+            <Button type="button" variant="secondary" onClick={() => addSectionItem('links')}>
+              <Plus size={14} /> Add
+            </Button>
+          </div>
         </div>
         {form.links.length === 0 ? <p className="text-sm text-gray-600 dark:text-gray-400">No link entries yet.</p> : null}
         {form.links.map((item, index) => (
