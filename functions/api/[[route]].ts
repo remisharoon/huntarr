@@ -986,6 +986,53 @@ function sanitizeProfileObjectArray(
   return output
 }
 
+function parseYearFromText(value: unknown): number | null {
+  const text = sanitizeString(value, 120)
+  if (!text) return null
+  const matches = text.match(/\b(19|20)\d{2}\b/g)
+  if (!matches?.length) return null
+  const parsed = Number.parseInt(matches[matches.length - 1], 10)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function parseEndYearFromText(value: unknown): number | null {
+  const text = sanitizeString(value, 120).toLowerCase()
+  if (!text) return null
+  if (/(present|current|now|ongoing|till date|to date)/.test(text)) {
+    return new Date().getUTCFullYear()
+  }
+  return parseYearFromText(text)
+}
+
+function inferYearsExperienceFromEntries(value: unknown): number | null {
+  if (!Array.isArray(value) || !value.length) return null
+
+  let earliest = Number.POSITIVE_INFINITY
+  let latest = 0
+  const currentYear = new Date().getUTCFullYear()
+
+  for (const rawItem of value) {
+    const item = asObject(rawItem)
+    const start = parseYearFromText(item.start) ?? parseYearFromText(item.description)
+    const end = parseEndYearFromText(item.end) ?? parseEndYearFromText(item.description)
+
+    if (!start && !end) continue
+
+    const normalizedStart = start ?? end ?? currentYear
+    const normalizedEnd = end ?? start ?? currentYear
+    if (normalizedStart > normalizedEnd) continue
+
+    earliest = Math.min(earliest, normalizedStart)
+    latest = Math.max(latest, normalizedEnd)
+  }
+
+  if (!Number.isFinite(earliest) || latest < earliest) {
+    return null
+  }
+
+  return Math.max(0, Math.min(50, latest - earliest))
+}
+
 function sanitizeExtractedProfile(payload: JsonObject): Partial<ProfileRecord> {
   const result: Partial<ProfileRecord> = {}
 
@@ -1001,12 +1048,26 @@ function sanitizeExtractedProfile(payload: JsonObject): Partial<ProfileRecord> {
   const location = sanitizeString(payload.location, 180)
   if (location) result.location = location
 
+  const desiredJobTitle = sanitizeString(payload.desired_job_title, 180)
+  if (desiredJobTitle) result.desired_job_title = desiredJobTitle
+
+  const desiredLocation = sanitizeString(payload.desired_location, 180)
+  if (desiredLocation) result.desired_location = desiredLocation
+
   const summary = sanitizeString(payload.summary, 2400)
   if (summary) result.summary = summary
 
-  const yearsExperience = Number.parseInt(asString(payload.years_experience), 10)
+  const yearsExperience =
+    typeof payload.years_experience === 'number' && Number.isFinite(payload.years_experience)
+      ? payload.years_experience
+      : Number.parseInt(asString(payload.years_experience), 10)
   if (Number.isFinite(yearsExperience) && yearsExperience >= 0) {
     result.years_experience = Math.min(50, yearsExperience)
+  } else {
+    const inferredYearsExperience = inferYearsExperienceFromEntries(payload.experience)
+    if (typeof inferredYearsExperience === 'number' && Number.isFinite(inferredYearsExperience)) {
+      result.years_experience = inferredYearsExperience
+    }
   }
 
   const skills = sanitizeStringList(payload.skills, 50, 80)
@@ -1116,12 +1177,16 @@ function mergeExtractedProfile(current: JsonObject, extracted: Partial<ProfileRe
     resume_path: resumePath,
   }
 
-  const singleFields: Array<keyof Pick<ProfileRecord, 'full_name' | 'email' | 'phone' | 'location' | 'summary'>> = [
+  const singleFields: Array<
+    keyof Pick<ProfileRecord, 'full_name' | 'email' | 'phone' | 'location' | 'summary' | 'desired_job_title' | 'desired_location'>
+  > = [
     'full_name',
     'email',
     'phone',
     'location',
     'summary',
+    'desired_job_title',
+    'desired_location',
   ]
 
   for (const field of singleFields) {
@@ -1156,7 +1221,140 @@ function mergeExtractedProfile(current: JsonObject, extracted: Partial<ProfileRe
   return next
 }
 
-async function extractProfileWithOpenRouter(apiKey: string, model: string, resumeText: string): Promise<Partial<ProfileRecord>> {
+type ResumeExtractionPass = {
+  id: 'identity' | 'summary' | 'career' | 'portfolio'
+  label: string
+  maxTokens: number
+  systemPrompt: string
+  taskPrompt: string
+}
+
+type ResumeExtractionResult = {
+  extracted: Partial<ProfileRecord>
+  warnings: string[]
+}
+
+const RESUME_TEXT_CHAR_LIMIT = 32000
+const RESUME_EXTRACTION_ATTEMPTS_PER_PASS = 2
+
+const RESUME_EXTRACTION_PASSES: ResumeExtractionPass[] = [
+  {
+    id: 'identity',
+    label: 'Identity and contact extraction',
+    maxTokens: 450,
+    systemPrompt:
+      'You extract candidate identity data from resumes. Think step by step internally but output JSON only. Return a JSON object with exactly these keys: full_name (string), email (string), phone (string), location (string), desired_job_title (string), desired_location (string). Use empty string for missing fields. Do not hallucinate contact data.',
+    taskPrompt:
+      'Step 1: find identity and contact lines. Step 2: map values to keys. Step 3: infer desired_job_title from the strongest or latest role title when not explicit. Step 4: infer desired_location from current location or preferred location statements.',
+  },
+  {
+    id: 'summary',
+    label: 'Summary and skills extraction',
+    maxTokens: 650,
+    systemPrompt:
+      'You extract candidate summary data from resumes. Think step by step internally but output JSON only. Return a JSON object with exactly these keys: years_experience (number), summary (string), skills (string[]). Use 0, empty string, or empty array when unknown. Keep summary concise and factual. Do not invent skills.',
+    taskPrompt:
+      'Step 1: identify role timeline and compute years_experience. Step 2: extract skills from skills/tools/technologies sections and role descriptions. Step 3: write a concise professional summary grounded only in resume facts.',
+  },
+  {
+    id: 'career',
+    label: 'Experience and education extraction',
+    maxTokens: 1300,
+    systemPrompt:
+      'You extract candidate career history from resumes. Think step by step internally but output JSON only. Return a JSON object with exactly these keys: experience (array), education (array). Experience item schema: { title, company, start, end, description }. Education item schema: { degree, institution, year, description }. Use empty arrays when missing and keep entries in reverse-chronological order when possible.',
+    taskPrompt:
+      'Step 1: extract all work history entries with title/company/dates/high-value bullets. Step 2: extract all education entries with degree/institution/year/details. Step 3: ensure schema keys are exact and values are plain strings.',
+  },
+  {
+    id: 'portfolio',
+    label: 'Projects and credentials extraction',
+    maxTokens: 900,
+    systemPrompt:
+      'You extract additional candidate profile sections from resumes. Think step by step internally but output JSON only. Return a JSON object with exactly these keys: awards, certifications, projects, languages, links. Use empty arrays for missing sections. Awards schema: { title, issuer, year, description }. Certifications schema: { name, issuer, year, credential_id, url }. Projects schema: { name, role, start, end, description, url, tech_stack }. Languages schema: { name, proficiency }. Links schema: { label, url }.',
+    taskPrompt:
+      'Step 1: extract projects, awards, and certifications from dedicated sections. Step 2: capture languages and proficiency levels. Step 3: capture external links (portfolio, LinkedIn, GitHub, personal site) with meaningful labels.',
+  },
+]
+
+function mergeExtractedProfilePartials(
+  current: Partial<ProfileRecord>,
+  extracted: Partial<ProfileRecord>,
+): Partial<ProfileRecord> {
+  const next: Partial<ProfileRecord> = { ...current }
+
+  const singleFields: Array<
+    keyof Pick<ProfileRecord, 'full_name' | 'email' | 'phone' | 'location' | 'summary' | 'desired_job_title' | 'desired_location'>
+  > = ['full_name', 'email', 'phone', 'location', 'summary', 'desired_job_title', 'desired_location']
+
+  for (const field of singleFields) {
+    const value = sanitizeString(extracted[field])
+    if (value) {
+      ;(next as any)[field] = value
+    }
+  }
+
+  if (typeof extracted.years_experience === 'number' && Number.isFinite(extracted.years_experience)) {
+    next.years_experience = Math.max(0, Math.min(50, Math.floor(extracted.years_experience)))
+  }
+
+  const listFields: Array<
+    keyof Pick<ProfileRecord, 'skills' | 'experience' | 'education' | 'awards' | 'certifications' | 'projects' | 'languages' | 'links'>
+  > = ['skills', 'experience', 'education', 'awards', 'certifications', 'projects', 'languages', 'links']
+
+  for (const field of listFields) {
+    const value = extracted[field]
+    if (Array.isArray(value) && value.length) {
+      ;(next as any)[field] = value
+    }
+  }
+
+  return next
+}
+
+function applyDerivedExtractionDefaults(extracted: Partial<ProfileRecord>): Partial<ProfileRecord> {
+  const next: Partial<ProfileRecord> = { ...extracted }
+
+  if (!sanitizeString(next.desired_job_title, 180)) {
+    const experience = Array.isArray(next.experience) ? next.experience : []
+    const topRole = sanitizeString(asObject(experience[0]).title, 160)
+    if (topRole) {
+      next.desired_job_title = topRole
+    }
+  }
+
+  if (!sanitizeString(next.desired_location, 180)) {
+    const location = sanitizeString(next.location, 180)
+    if (location) {
+      next.desired_location = location
+    }
+  }
+
+  if (!(typeof next.years_experience === 'number' && Number.isFinite(next.years_experience) && next.years_experience > 0)) {
+    const inferredYears = inferYearsExperienceFromEntries(next.experience)
+    if (typeof inferredYears === 'number' && Number.isFinite(inferredYears)) {
+      next.years_experience = inferredYears
+    }
+  }
+
+  return sanitizeExtractedProfile(next as JsonObject)
+}
+
+function createExtractionUserPrompt(pass: ResumeExtractionPass, resumeText: string, isRetry: boolean): string {
+  const retryHint = isRetry
+    ? 'Retry mode: your previous output was empty or invalid. Follow the schema exactly and return JSON only.\n\n'
+    : ''
+  return `${retryHint}${pass.taskPrompt}\n\nResume text:\n${resumeText}`
+}
+
+async function requestOpenRouterExtraction(
+  apiKey: string,
+  model: string,
+  options: {
+    systemPrompt: string
+    userPrompt: string
+    maxTokens: number
+  },
+): Promise<JsonObject> {
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -1166,17 +1364,16 @@ async function extractProfileWithOpenRouter(apiKey: string, model: string, resum
     body: JSON.stringify({
       model,
       temperature: 0,
-      max_tokens: 1800,
+      max_tokens: options.maxTokens,
       response_format: { type: 'json_object' },
       messages: [
         {
           role: 'system',
-          content:
-            'You extract profile data from resumes. Return only valid JSON with keys: full_name, email, phone, location, years_experience, summary, skills, experience, education, awards, certifications, projects, languages, links. Use empty arrays for missing list sections and omit unknown scalar fields.',
+          content: options.systemPrompt,
         },
         {
           role: 'user',
-          content: `Extract a structured profile from this resume text:\n\n${resumeText.slice(0, 32000)}`,
+          content: options.userPrompt,
         },
       ],
     }),
@@ -1204,7 +1401,62 @@ async function extractProfileWithOpenRouter(apiKey: string, model: string, resum
   }
 
   const parsed = extractJsonObjectFromModelOutput(output)
-  return sanitizeExtractedProfile(parsed)
+  return parsed
+}
+
+async function runExtractionPass(
+  apiKey: string,
+  model: string,
+  resumeText: string,
+  pass: ResumeExtractionPass,
+): Promise<Partial<ProfileRecord>> {
+  let lastError = 'no usable fields returned'
+
+  for (let attempt = 0; attempt < RESUME_EXTRACTION_ATTEMPTS_PER_PASS; attempt += 1) {
+    try {
+      const payload = await requestOpenRouterExtraction(apiKey, model, {
+        systemPrompt: pass.systemPrompt,
+        userPrompt: createExtractionUserPrompt(pass, resumeText, attempt > 0),
+        maxTokens: pass.maxTokens,
+      })
+      const extracted = sanitizeExtractedProfile(payload)
+      if (Object.keys(extracted).length) {
+        return extracted
+      }
+      lastError = 'response contained no usable fields'
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : 'unknown error'
+    }
+  }
+
+  throw new Error(`${pass.label} failed: ${compactMessage(lastError, 220)}`)
+}
+
+async function extractProfileWithOpenRouter(apiKey: string, model: string, resumeText: string): Promise<ResumeExtractionResult> {
+  const snippet = resumeText.slice(0, RESUME_TEXT_CHAR_LIMIT)
+  let merged: Partial<ProfileRecord> = {}
+  const passErrors: string[] = []
+
+  for (const pass of RESUME_EXTRACTION_PASSES) {
+    try {
+      const extracted = await runExtractionPass(apiKey, model, snippet, pass)
+      merged = mergeExtractedProfilePartials(merged, extracted)
+    } catch (error) {
+      passErrors.push(error instanceof Error ? error.message : `${pass.label} failed`)
+    }
+  }
+
+  merged = applyDerivedExtractionDefaults(merged)
+
+  if (!Object.keys(merged).length) {
+    const reason = passErrors.length ? ` (${passErrors.join(' | ')})` : ''
+    throw new Error(`AI profile extraction returned no usable fields${reason}`)
+  }
+
+  return {
+    extracted: merged,
+    warnings: passErrors,
+  }
 }
 
 async function readCredential(storage: Storage, userId: string, domain: string, username = 'default'): Promise<CredentialRecord | null> {
@@ -1924,14 +2176,17 @@ app.post('/api/profile/import-resume', async (c) => {
     })
   }
 
-  let extracted: Partial<ProfileRecord>
+  let extractionResult: ResumeExtractionResult
   try {
-    extracted = await extractProfileWithOpenRouter(openRouterApiKey, openRouterModel, resumeText)
+    extractionResult = await extractProfileWithOpenRouter(openRouterApiKey, openRouterModel, resumeText)
   } catch (error) {
     throw new HTTPException(502, {
       message: `AI profile extraction failed: ${compactMessage(error instanceof Error ? error.message : 'unknown error', 220)}`,
     })
   }
+
+  const extracted = extractionResult.extracted
+  const extractionWarnings = extractionResult.warnings
 
   if (!Object.keys(extracted).length) {
     throw new HTTPException(502, { message: 'AI profile extraction returned no usable fields' })
@@ -1946,6 +2201,7 @@ app.post('/api/profile/import-resume', async (c) => {
   return c.json({
     ...extracted,
     resume_path: resumePath,
+    extraction_warnings: extractionWarnings,
   })
 })
 

@@ -163,6 +163,7 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
   const [resumeStatus, setResumeStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle')
   const [resumeFileName, setResumeFileName] = useState('')
   const [resumeError, setResumeError] = useState('')
+  const [resumeWarnings, setResumeWarnings] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const hasImportedRef = useRef(false)
 
@@ -188,12 +189,19 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
     setResumeFileName(file.name)
     setResumeStatus('uploading')
     setResumeError('')
+    setResumeWarnings([])
     try {
       const extracted = await api.importResume(file)
+      const extractionWarnings = Array.isArray(extracted.extraction_warnings)
+        ? extracted.extraction_warnings.map((entry) => asString(entry).trim()).filter(Boolean)
+        : []
+      const { extraction_warnings: _unused, ...profilePatch } = extracted
       hasImportedRef.current = true
-      setForm((prev) => normalizeProfile({ ...prev, ...extracted }))
+      setForm((prev) => normalizeProfile({ ...prev, ...profilePatch }))
+      setResumeWarnings(extractionWarnings)
       setResumeStatus('done')
     } catch (err: any) {
+      setResumeWarnings([])
       setResumeError(err?.message ?? 'Upload failed')
       setResumeStatus('error')
     }
@@ -277,6 +285,11 @@ export function ProfilePage({ profile, onSave }: ProfilePageProps) {
           </Badge>
           {resumeStatus === 'uploading' && <span className="text-sm text-gray-600 dark:text-gray-400">Extracting identity, experience, education, skills, achievements, and links...</span>}
           {resumeStatus === 'done' && <span className="text-sm text-green-700 dark:text-green-300">Profile refreshed from {resumeFileName}</span>}
+          {resumeStatus === 'done' && resumeWarnings.length > 0 ? (
+            <span className="text-sm text-amber-700 dark:text-amber-300">
+              Partial extraction: {resumeWarnings.join(' | ')}
+            </span>
+          ) : null}
           {resumeStatus === 'error' && <span className="text-sm text-red-700 dark:text-red-300">{resumeError}</span>}
         </div>
 

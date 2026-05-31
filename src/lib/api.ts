@@ -18,6 +18,10 @@ export type HuntPreflightResponse = {
   checked_at: string
 }
 
+export type ResumeImportResponse = Partial<Profile> & {
+  extraction_warnings?: string[]
+}
+
 type ApiErrorInit = {
   message: string
   status: number
@@ -224,7 +228,7 @@ export const api = {
     request('/api/credentials', { method: 'POST', body: JSON.stringify(body) }),
   createSteelSession: (body: Record<string, unknown>) =>
     request('/api/byok/steel/session', { method: 'POST', body: JSON.stringify(body) }),
-  importResume: (file: File): Promise<Partial<Profile>> => {
+  importResume: (file: File): Promise<ResumeImportResponse> => {
     const fd = new FormData()
     fd.append('file', file)
     const send = async () => {
