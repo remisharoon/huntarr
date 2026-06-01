@@ -1,9 +1,1 @@
-node_modules
-.env
-.DS_Store
-coverage
-dist
-.vite
-site
-tsconfig.tsbuildinfo
-*.log
+(src/index.css)
