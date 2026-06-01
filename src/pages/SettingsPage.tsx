@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { ExternalLink, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, ExternalLink, Plus, Trash2 } from 'lucide-react'
 
 import { api, formatApiError } from '../lib/api'
 import { Badge, Button, Card, Input, PageHeader, TextArea } from '../components/ui'
@@ -141,12 +141,27 @@ export function SettingsPage() {
   const [newSchedule, setNewSchedule] = useState({ name: '', cron_expr: '', timezone: 'UTC', payload: '{}' })
   const [openRouterApiKey, setOpenRouterApiKey] = useState('')
   const [openRouterModel, setOpenRouterModel] = useState('openrouter/free')
+  const [geminiApiKey, setGeminiApiKey] = useState('')
+  const [groqApiKey, setGroqApiKey] = useState('')
   const [steelApiKey, setSteelApiKey] = useState('')
   const [steelProjectId, setSteelProjectId] = useState('')
   const [adzunaAppId, setAdzunaAppId] = useState('')
   const [adzunaApiKey, setAdzunaApiKey] = useState('')
   const [usajobsApiKey, setUsajobsApiKey] = useState('')
   const [usajobsUserAgent, setUsajobsUserAgent] = useState('')
+
+  // Collapsed state for config blocks
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    providerKeys: false,
+    jobSources: false,
+    applicationBehavior: false,
+    atsCredentials: false,
+    scheduling: false,
+  })
+
+  const toggleSection = (section: string) => {
+    setCollapsedSections(prev => ({ ...prev, [section]: !prev[section] }))
+  }
 
   const flashMessage = (text: string) => {
     setMessageTone('info')
@@ -174,19 +189,25 @@ export function SettingsPage() {
       setProfile(normalizedProfile)
       setJobSources(normalizeJobSources(profileRes.job_sources))
 
-      const [openRouterCredRes, steelCredRes, adzunaCredRes, usajobsCredRes] = await Promise.allSettled([
+      const [openRouterCredRes, steelCredRes, adzunaCredRes, usajobsCredRes, geminiCredRes, groqCredRes] = await Promise.allSettled([
         api.getCredential('openrouter.ai', 'default'),
         api.getCredential('steel.dev', 'default'),
         api.getCredential('adzuna.com', 'default'),
         api.getCredential('usajobs.gov', 'default'),
+        api.getCredential('generativelanguage.googleapis.com', 'default'),
+        api.getCredential('api.groq.com', 'default'),
       ])
 
       const openRouterCred = openRouterCredRes.status === 'fulfilled' ? (openRouterCredRes.value as any) : null
       const steelCred = steelCredRes.status === 'fulfilled' ? (steelCredRes.value as any) : null
       const adzunaCred = adzunaCredRes.status === 'fulfilled' ? (adzunaCredRes.value as any) : null
       const usajobsCred = usajobsCredRes.status === 'fulfilled' ? (usajobsCredRes.value as any) : null
+      const geminiCred = geminiCredRes.status === 'fulfilled' ? (geminiCredRes.value as any) : null
+      const groqCred = groqCredRes.status === 'fulfilled' ? (groqCredRes.value as any) : null
 
       setOpenRouterApiKey(openRouterCred?.password || '')
+      setGeminiApiKey(geminiCred?.password || '')
+      setGroqApiKey(groqCred?.password || '')
       setSteelApiKey(steelCred?.password || '')
       setAdzunaApiKey(adzunaCred?.password || '')
       setAdzunaAppId(adzunaCred?.metadata?.app_id || '')
@@ -326,6 +347,24 @@ export function SettingsPage() {
         })
       }
 
+      if (geminiApiKey.trim()) {
+        await api.storeCredential({
+          domain: 'generativelanguage.googleapis.com',
+          username: 'default',
+          password: geminiApiKey.trim(),
+          metadata: { provider: 'gemini', byok: true },
+        })
+      }
+
+      if (groqApiKey.trim()) {
+        await api.storeCredential({
+          domain: 'api.groq.com',
+          username: 'default',
+          password: groqApiKey.trim(),
+          metadata: { provider: 'groq', byok: true },
+        })
+      }
+
       if (steelApiKey.trim()) {
         await api.storeCredential({
           domain: 'steel.dev',
@@ -450,299 +489,421 @@ export function SettingsPage() {
       ) : null}
 
       <Card className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Provider Keys</h2>
+        <button
+          type="button"
+          onClick={() => toggleSection('providerKeys')}
+          className="flex w-full items-center justify-between"
+        >
+          <div className="flex items-center gap-2">
+            {collapsedSections.providerKeys ? (
+              <ChevronRight className="h-5 w-5 text-gray-500" />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-gray-500" />
+            )}
+            <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Provider Keys</h2>
+          </div>
           <Badge tone="info">BYOK</Badge>
-        </div>
-        <div className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
-          <p>Bring your own keys. Huntarr does not ship with shared API keys.</p>
-          <p>OpenRouter key is used directly from the browser for AI tasks.</p>
-          <p>Steel key powers automation. Adzuna/USAJobs keys unlock additional discovery sources.</p>
-        </div>
+        </button>
+        
+        {!collapsedSections.providerKeys && (
+          <>
+            <div className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
+              <p>Bring your own keys. Huntarr does not ship with shared API keys.</p>
+              <p>OpenRouter, Gemini, and Groq can be used for AI tasks.</p>
+              <p>Steel key powers automation. Adzuna/USAJobs keys unlock additional discovery sources.</p>
+            </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
-            <a
-              href="https://openrouter.ai/keys"
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Create OpenRouter API keys (opens in new tab)"
-              className="inline-flex items-center gap-1 text-sm font-semibold text-gray-900 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-gray-100 dark:focus-visible:ring-offset-gray-950"
-            >
-              OpenRouter (BYOK)
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-            </a>
-            <Input
-              type="password"
-              placeholder="OpenRouter API key"
-              value={openRouterApiKey}
-              onChange={(event) => setOpenRouterApiKey(event.target.value)}
-            />
-            <Input
-              placeholder="Model (e.g. openrouter/free)"
-              value={openRouterModel}
-              onChange={(event) => setOpenRouterModel(event.target.value)}
-            />
-            <Button type="button" variant="secondary" className="h-8 px-2 text-xs" onClick={testOpenRouterKey}>
-              Test OpenRouter Key
-            </Button>
-          </div>
+            <div className="grid gap-4 lg:grid-cols-3">
+              <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+                <a
+                  href="https://openrouter.ai/keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Create OpenRouter API keys (opens in new tab)"
+                  className="inline-flex items-center gap-1 text-sm font-semibold text-gray-900 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-gray-100 dark:focus-visible:ring-offset-gray-950"
+                >
+                  OpenRouter (BYOK)
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                </a>
+                <Input
+                  type="password"
+                  placeholder="OpenRouter API key"
+                  value={openRouterApiKey}
+                  onChange={(event) => setOpenRouterApiKey(event.target.value)}
+                />
+                <Input
+                  placeholder="Model (e.g. openrouter/free)"
+                  value={openRouterModel}
+                  onChange={(event) => setOpenRouterModel(event.target.value)}
+                />
+                <Button type="button" variant="secondary" className="h-8 px-2 text-xs" onClick={testOpenRouterKey}>
+                  Test OpenRouter Key
+                </Button>
+              </div>
 
-          <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
-            <a
-              href="https://app.steel.dev/"
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Create Steel API keys (opens in new tab)"
-              className="inline-flex items-center gap-1 text-sm font-semibold text-gray-900 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-gray-100 dark:focus-visible:ring-offset-gray-950"
-            >
-              Steel.dev (BYOK)
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-            </a>
-            <Input
-              type="password"
-              placeholder="Steel API key"
-              value={steelApiKey}
-              onChange={(event) => setSteelApiKey(event.target.value)}
-            />
-            <Input
-              placeholder="Steel project ID (optional)"
-              value={steelProjectId}
-              onChange={(event) => setSteelProjectId(event.target.value)}
-            />
-            <Button type="button" variant="secondary" className="h-8 px-2 text-xs" onClick={testSteelKey}>
-              Test Steel Key
-            </Button>
-          </div>
+              <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+                <a
+                  href="https://aistudio.google.com/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Create Gemini API keys (opens in new tab)"
+                  className="inline-flex items-center gap-1 text-sm font-semibold text-gray-900 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-gray-100 dark:focus-visible:ring-offset-gray-950"
+                >
+                  Google Gemini (BYOK)
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                </a>
+                <Input
+                  type="password"
+                  placeholder="Gemini API key"
+                  value={geminiApiKey}
+                  onChange={(event) => setGeminiApiKey(event.target.value)}
+                />
+                <p className="text-xs text-gray-600 dark:text-gray-400">Stored as credential `generativelanguage.googleapis.com/default`.</p>
+              </div>
 
-          <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Adzuna (Optional)</p>
-            <Input
-              placeholder="Adzuna app ID"
-              value={adzunaAppId}
-              onChange={(event) => setAdzunaAppId(event.target.value)}
-            />
-            <Input
-              type="password"
-              placeholder="Adzuna app key"
-              value={adzunaApiKey}
-              onChange={(event) => setAdzunaApiKey(event.target.value)}
-            />
-            <p className="text-xs text-gray-600 dark:text-gray-400">Stored as credential `adzuna.com/default`.</p>
-          </div>
+              <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+                <a
+                  href="https://console.groq.com/keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Create Groq API keys (opens in new tab)"
+                  className="inline-flex items-center gap-1 text-sm font-semibold text-gray-900 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-gray-100 dark:focus-visible:ring-offset-gray-950"
+                >
+                  Groq (BYOK)
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                </a>
+                <Input
+                  type="password"
+                  placeholder="Groq API key"
+                  value={groqApiKey}
+                  onChange={(event) => setGroqApiKey(event.target.value)}
+                />
+                <p className="text-xs text-gray-600 dark:text-gray-400">Stored as credential `api.groq.com/default`.</p>
+              </div>
 
-          <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">USAJobs (Optional)</p>
-            <Input
-              placeholder="User-Agent email (required by USAJobs)"
-              value={usajobsUserAgent}
-              onChange={(event) => setUsajobsUserAgent(event.target.value)}
-            />
-            <Input
-              type="password"
-              placeholder="USAJobs API key"
-              value={usajobsApiKey}
-              onChange={(event) => setUsajobsApiKey(event.target.value)}
-            />
-            <p className="text-xs text-gray-600 dark:text-gray-400">Stored as credential `usajobs.gov/default`.</p>
-          </div>
-        </div>
+              <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+                <a
+                  href="https://app.steel.dev/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Create Steel API keys (opens in new tab)"
+                  className="inline-flex items-center gap-1 text-sm font-semibold text-gray-900 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-gray-100 dark:focus-visible:ring-offset-gray-950"
+                >
+                  Steel.dev (BYOK)
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                </a>
+                <Input
+                  type="password"
+                  placeholder="Steel API key"
+                  value={steelApiKey}
+                  onChange={(event) => setSteelApiKey(event.target.value)}
+                />
+                <Input
+                  placeholder="Steel project ID (optional)"
+                  value={steelProjectId}
+                  onChange={(event) => setSteelProjectId(event.target.value)}
+                />
+                <Button type="button" variant="secondary" className="h-8 px-2 text-xs" onClick={testSteelKey}>
+                  Test Steel Key
+                </Button>
+              </div>
 
-        <div className="flex justify-end">
-          <Button type="button" disabled={busy} onClick={saveByokKeys} className="h-8 px-3 text-xs">
-            Save Provider Settings
-          </Button>
-        </div>
+              <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Adzuna (Optional)</p>
+                <Input
+                  placeholder="Adzuna app ID"
+                  value={adzunaAppId}
+                  onChange={(event) => setAdzunaAppId(event.target.value)}
+                />
+                <Input
+                  type="password"
+                  placeholder="Adzuna app key"
+                  value={adzunaApiKey}
+                  onChange={(event) => setAdzunaApiKey(event.target.value)}
+                />
+                <p className="text-xs text-gray-600 dark:text-gray-400">Stored as credential `adzuna.com/default`.</p>
+              </div>
+
+              <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">USAJobs (Optional)</p>
+                <Input
+                  placeholder="User-Agent email (required by USAJobs)"
+                  value={usajobsUserAgent}
+                  onChange={(event) => setUsajobsUserAgent(event.target.value)}
+                />
+                <Input
+                  type="password"
+                  placeholder="USAJobs API key"
+                  value={usajobsApiKey}
+                  onChange={(event) => setUsajobsApiKey(event.target.value)}
+                />
+                <p className="text-xs text-gray-600 dark:text-gray-400">Stored as credential `usajobs.gov/default`.</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button type="button" disabled={busy} onClick={saveByokKeys} className="h-8 px-3 text-xs">
+                Save Provider Settings
+              </Button>
+            </div>
+          </>
+        )}
       </Card>
 
       <Card className="space-y-4">
-        <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Job Sources</h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400">Select which job sources to query when starting hunts. All sources run in parallel.</p>
+        <button
+          type="button"
+          onClick={() => toggleSection('jobSources')}
+          className="flex w-full items-center justify-between"
+        >
+          <div className="flex items-center gap-2">
+            {collapsedSections.jobSources ? (
+              <ChevronRight className="h-5 w-5 text-gray-500" />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-gray-500" />
+            )}
+            <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Job Sources</h2>
+          </div>
+        </button>
 
-        <div className="space-y-2">
-          {jobSourceDefinitions.map((source) => {
-            const badge = sourceBadge(source.setup)
-            return (
-              <label key={source.id} className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/60">
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(jobSources[source.id])}
-                    onChange={(event) => updateJobSources({ ...jobSources, [source.id]: event.target.checked })}
-                    disabled={busy}
-                  />
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{source.label}</p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">{source.description}</p>
-                  </div>
-                </div>
-                <Badge tone={badge.tone}>{badge.label}</Badge>
-              </label>
-            )
-          })}
-        </div>
+        {!collapsedSections.jobSources && (
+          <>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Select which job sources to query when starting hunts. All sources run in parallel.</p>
+
+            <div className="space-y-2">
+              {jobSourceDefinitions.map((source) => {
+                const badge = sourceBadge(source.setup)
+                return (
+                  <label key={source.id} className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/60">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(jobSources[source.id])}
+                        onChange={(event) => updateJobSources({ ...jobSources, [source.id]: event.target.checked })}
+                        disabled={busy}
+                      />
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{source.label}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400">{source.description}</p>
+                      </div>
+                    </div>
+                    <Badge tone={badge.tone}>{badge.label}</Badge>
+                  </label>
+                )
+              })}
+            </div>
+          </>
+        )}
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card className="space-y-4">
-          <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Application Behavior</h2>
+          <button
+            type="button"
+            onClick={() => toggleSection('applicationBehavior')}
+            className="flex w-full items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              {collapsedSections.applicationBehavior ? (
+                <ChevronRight className="h-5 w-5 text-gray-500" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-gray-500" />
+              )}
+              <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Application Behavior</h2>
+            </div>
+          </button>
 
-          <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
-            <label className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-              <input
-                type="checkbox"
-                checked={config.auto_submit_enabled ?? true}
-                onChange={(event) => {
-                  const value = event.target.checked
-                  setConfig({ ...config, auto_submit_enabled: value })
-                  saveConfig({ auto_submit_enabled: value })
-                }}
-              />
-              Auto-submit applications
-            </label>
-            <p className="text-xs text-gray-600 dark:text-gray-400">Immediately submit eligible forms without manual review.</p>
-          </div>
+          {!collapsedSections.applicationBehavior && (
+            <>
+              <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+                <label className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  <input
+                    type="checkbox"
+                    checked={config.auto_submit_enabled ?? true}
+                    onChange={(event) => {
+                      const value = event.target.checked
+                      setConfig({ ...config, auto_submit_enabled: value })
+                      saveConfig({ auto_submit_enabled: value })
+                    }}
+                  />
+                  Auto-submit applications
+                </label>
+                <p className="text-xs text-gray-600 dark:text-gray-400">Immediately submit eligible forms without manual review.</p>
+              </div>
 
-          <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
-            <label className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-              <input
-                type="checkbox"
-                checked={config.browser_headless ?? true}
-                onChange={(event) => {
-                  const value = event.target.checked
-                  setConfig({ ...config, browser_headless: value })
-                  saveConfig({ browser_headless: value })
-                }}
-              />
-              Headless browser
-            </label>
-            <p className="text-xs text-gray-600 dark:text-gray-400">Disable only when visual debugging is necessary.</p>
-          </div>
+              <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+                <label className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  <input
+                    type="checkbox"
+                    checked={config.browser_headless ?? true}
+                    onChange={(event) => {
+                      const value = event.target.checked
+                      setConfig({ ...config, browser_headless: value })
+                      saveConfig({ browser_headless: value })
+                    }}
+                  />
+                  Headless browser
+                </label>
+                <p className="text-xs text-gray-600 dark:text-gray-400">Disable only when visual debugging is necessary.</p>
+              </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-gray-900 dark:text-gray-100">Session URL</label>
-            <Input
-              value={config.session_url ?? ''}
-              onChange={(event) => setConfig({ ...config, session_url: event.target.value })}
-              onBlur={(event) => saveConfig({ session_url: event.target.value })}
-            />
-          </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-900 dark:text-gray-100">Session URL</label>
+                <Input
+                  value={config.session_url ?? ''}
+                  onChange={(event) => setConfig({ ...config, session_url: event.target.value })}
+                  onBlur={(event) => saveConfig({ session_url: event.target.value })}
+                />
+              </div>
+            </>
+          )}
         </Card>
 
         <Card className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">ATS Credentials</h2>
-            <Badge tone="info">{credentials.length}</Badge>
-          </div>
-          <p className="text-xs text-gray-600 dark:text-gray-400">
-            Used for Greenhouse/Lever/Workday login. Not used for OpenRouter or Steel BYOK keys.
-          </p>
-
-          {credentials.length === 0 ? (
-            <p className="text-sm text-gray-600 dark:text-gray-400">No ATS credentials stored yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {credentials.map((credential, index) => (
-                <div key={`${credential.domain}-${credential.username}-${index}`} className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/70">
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-gray-100">{credential.domain}</p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">{credential.username}</p>
-                  </div>
-                  <Button
-                    variant="danger"
-                    className="h-8 px-2 text-xs"
-                    onClick={() => deleteCredential(credential.domain, credential.username)}
-                  >
-                    <Trash2 size={14} /> Delete
-                  </Button>
-                </div>
-              ))}
+          <button
+            type="button"
+            onClick={() => toggleSection('atsCredentials')}
+            className="flex w-full items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              {collapsedSections.atsCredentials ? (
+                <ChevronRight className="h-5 w-5 text-gray-500" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-gray-500" />
+              )}
+              <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">ATS Credentials</h2>
             </div>
-          )}
+            <Badge tone="info">{credentials.length}</Badge>
+          </button>
 
-          <form onSubmit={addCredential} className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Add credential</p>
-            <Input
-              placeholder="ATS domain (e.g. acme.greenhouse.io)"
-              value={newCredential.domain}
-              onChange={(event) => setNewCredential({ ...newCredential, domain: event.target.value })}
-            />
-            <Input
-              placeholder="Login email or username"
-              value={newCredential.username}
-              onChange={(event) => setNewCredential({ ...newCredential, username: event.target.value })}
-            />
-            <Input
-              type="password"
-              placeholder="Password"
-              value={newCredential.password}
-              onChange={(event) => setNewCredential({ ...newCredential, password: event.target.value })}
-            />
-            <Button type="submit" disabled={busy} className="h-8 px-2 text-xs">
-              <Plus size={14} /> Add Credential
-            </Button>
-          </form>
+          {!collapsedSections.atsCredentials && (
+            <>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                Used for Greenhouse/Lever/Workday login. Not used for OpenRouter or Steel BYOK keys.
+              </p>
+
+              {credentials.length === 0 ? (
+                <p className="text-sm text-gray-600 dark:text-gray-400">No ATS credentials stored yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {credentials.map((credential, index) => (
+                    <div key={`${credential.domain}-${credential.username}-${index}`} className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/70">
+                      <div>
+                        <p className="font-semibold text-gray-900 dark:text-gray-100">{credential.domain}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400">{credential.username}</p>
+                      </div>
+                      <Button
+                        variant="danger"
+                        className="h-8 px-2 text-xs"
+                        onClick={() => deleteCredential(credential.domain, credential.username)}
+                      >
+                        <Trash2 size={14} /> Delete
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <form onSubmit={addCredential} className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Add credential</p>
+                <Input
+                  placeholder="ATS domain (e.g. acme.greenhouse.io)"
+                  value={newCredential.domain}
+                  onChange={(event) => setNewCredential({ ...newCredential, domain: event.target.value })}
+                />
+                <Input
+                  placeholder="Login email or username"
+                  value={newCredential.username}
+                  onChange={(event) => setNewCredential({ ...newCredential, username: event.target.value })}
+                />
+                <Input
+                  type="password"
+                  placeholder="Password"
+                  value={newCredential.password}
+                  onChange={(event) => setNewCredential({ ...newCredential, password: event.target.value })}
+                />
+                <Button type="submit" disabled={busy} className="h-8 px-2 text-xs">
+                  <Plus size={14} /> Add Credential
+                </Button>
+              </form>
+            </>
+          )}
         </Card>
       </div>
 
-        <Card className="space-y-4">
-          <div className="flex items-center justify-between">
+      <Card className="space-y-4">
+        <button
+          type="button"
+          onClick={() => toggleSection('scheduling')}
+          className="flex w-full items-center justify-between"
+        >
+          <div className="flex items-center gap-2">
+            {collapsedSections.scheduling ? (
+              <ChevronRight className="h-5 w-5 text-gray-500" />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-gray-500" />
+            )}
             <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">Scheduling</h2>
-            <Badge tone="default">{schedules.length} schedules</Badge>
           </div>
+          <Badge tone="default">{schedules.length} schedules</Badge>
+        </button>
 
-        {schedules.length === 0 ? (
-          <p className="text-sm text-gray-600 dark:text-gray-400">No schedules configured yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {schedules.map((schedule) => (
-              <div key={schedule.id} className="grid grid-cols-1 gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/70 md:grid-cols-[1.5fr_1fr_auto] md:items-center">
-                <div>
-                  <p className="font-semibold text-gray-900 dark:text-gray-100">{schedule.name}</p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">{schedule.cron_expr} ({schedule.timezone})</p>
-                </div>
-                <p className="text-xs text-gray-600 dark:text-gray-400">
-                  Next run: {schedule.next_run_at ? new Date(schedule.next_run_at).toLocaleString() : 'N/A'}
-                </p>
-                <div className="flex justify-start md:justify-end">
-                  <Button variant="danger" className="h-8 px-2 text-xs" onClick={() => deleteSchedule(schedule.id)}>
-                    <Trash2 size={14} /> Delete
-                  </Button>
-                </div>
+        {!collapsedSections.scheduling && (
+          <>
+            {schedules.length === 0 ? (
+              <p className="text-sm text-gray-600 dark:text-gray-400">No schedules configured yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {schedules.map((schedule) => (
+                  <div key={schedule.id} className="grid grid-cols-1 gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/70 md:grid-cols-[1.5fr_1fr_auto] md:items-center">
+                    <div>
+                      <p className="font-semibold text-gray-900 dark:text-gray-100">{schedule.name}</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">{schedule.cron_expr} ({schedule.timezone})</p>
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      Next run: {schedule.next_run_at ? new Date(schedule.next_run_at).toLocaleString() : 'N/A'}
+                    </p>
+                    <div className="flex justify-start md:justify-end">
+                      <Button variant="danger" className="h-8 px-2 text-xs" onClick={() => deleteSchedule(schedule.id)}>
+                        <Trash2 size={14} /> Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            )}
 
-        <form onSubmit={addSchedule} className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Create schedule</p>
-          <div className="grid gap-2 md:grid-cols-2">
-            <Input
-              placeholder="Schedule name"
-              value={newSchedule.name}
-              onChange={(event) => setNewSchedule({ ...newSchedule, name: event.target.value })}
-            />
-            <Input
-              placeholder="Cron expression"
-              value={newSchedule.cron_expr}
-              onChange={(event) => setNewSchedule({ ...newSchedule, cron_expr: event.target.value })}
-            />
-            <Input
-              placeholder="Timezone"
-              value={newSchedule.timezone}
-              onChange={(event) => setNewSchedule({ ...newSchedule, timezone: event.target.value })}
-            />
-          </div>
-          <TextArea
-            rows={4}
-            placeholder='Payload JSON, e.g. {"mode":"scheduled","search_config":{}}'
-            value={newSchedule.payload}
-            onChange={(event) => setNewSchedule({ ...newSchedule, payload: event.target.value })}
-          />
-          <Button type="submit" disabled={busy} className="h-8 px-2 text-xs">
-            <Plus size={14} /> Create Schedule
-          </Button>
-        </form>
+            <form onSubmit={addSchedule} className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Create schedule</p>
+              <div className="grid gap-2 md:grid-cols-2">
+                <Input
+                  placeholder="Schedule name"
+                  value={newSchedule.name}
+                  onChange={(event) => setNewSchedule({ ...newSchedule, name: event.target.value })}
+                />
+                <Input
+                  placeholder="Cron expression"
+                  value={newSchedule.cron_expr}
+                  onChange={(event) => setNewSchedule({ ...newSchedule, cron_expr: event.target.value })}
+                />
+                <Input
+                  placeholder="Timezone"
+                  value={newSchedule.timezone}
+                  onChange={(event) => setNewSchedule({ ...newSchedule, timezone: event.target.value })}
+                />
+              </div>
+              <TextArea
+                rows={4}
+                placeholder='Payload JSON, e.g. {"mode":"scheduled","search_config":{}}'
+                value={newSchedule.payload}
+                onChange={(event) => setNewSchedule({ ...newSchedule, payload: event.target.value })}
+              />
+              <Button type="submit" disabled={busy} className="h-8 px-2 text-xs">
+                <Plus size={14} /> Create Schedule
+              </Button>
+            </form>
+          </>
+        )}
       </Card>
     </div>
   )
