@@ -132,3 +132,16 @@ html.dark body {
     scroll-behavior: auto !important;
   }
 }
+
+/* Center Clerk sign-in/sign-up cards */
+.cl-rootBox {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.cl-card {
+  margin: auto;
+}
