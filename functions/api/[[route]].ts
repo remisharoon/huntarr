@@ -1478,6 +1478,7 @@ async function runRecoveryExtraction(
   model: string,
   resumeText: string,
   passIds: ResumeExtractionPass['id'][],
+  provider: 'openrouter' | 'gemini' | 'groq' = 'openrouter',
 ): Promise<Partial<ProfileRecord> | null> {
   const uniquePasses = uniquePassIds(passIds)
   if (!uniquePasses.length) return null
@@ -1493,11 +1494,26 @@ async function runRecoveryExtraction(
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const payload = await requestOpenRouterExtraction(apiKey, model, {
-        systemPrompt: buildRecoverySystemPrompt(uniquePasses),
-        userPrompt: buildRecoveryUserPrompt(uniquePasses, resumeText, attempt > 0),
-        maxTokens,
-      })
+      let payload: JsonObject
+      if (provider === 'gemini') {
+        payload = await requestGeminiExtraction(apiKey, model, {
+          systemPrompt: buildRecoverySystemPrompt(uniquePasses),
+          userPrompt: buildRecoveryUserPrompt(uniquePasses, resumeText, attempt > 0),
+          maxTokens,
+        })
+      } else if (provider === 'groq') {
+        payload = await requestGroqExtraction(apiKey, model, {
+          systemPrompt: buildRecoverySystemPrompt(uniquePasses),
+          userPrompt: buildRecoveryUserPrompt(uniquePasses, resumeText, attempt > 0),
+          maxTokens,
+        })
+      } else {
+        payload = await requestOpenRouterExtraction(apiKey, model, {
+          systemPrompt: buildRecoverySystemPrompt(uniquePasses),
+          userPrompt: buildRecoveryUserPrompt(uniquePasses, resumeText, attempt > 0),
+          maxTokens,
+        })
+      }
       const extracted = sanitizeExtractedProfile(payload)
       if (Object.keys(extracted).length) {
         return extracted
@@ -1776,11 +1792,126 @@ async function requestOpenRouterExtraction(
   return parsed
 }
 
+async function requestGeminiExtraction(
+  apiKey: string,
+  model: string,
+  options: {
+    systemPrompt: string
+    userPrompt: string
+    maxTokens: number
+  },
+): Promise<JsonObject> {
+  const geminiModel = model.startsWith('gemini-') ? model : 'gemini-2.0-flash'
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: `${options.systemPrompt}\n\n${options.userPrompt}` },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0,
+          maxOutputTokens: options.maxTokens,
+          responseMimeType: 'application/json',
+        },
+      }),
+    },
+  )
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(text || `Gemini extraction failed (${response.status})`)
+  }
+
+  const payload = asObject(await response.json())
+  const candidates = Array.isArray(payload.candidates) ? payload.candidates : []
+  const firstCandidate = asObject(candidates[0])
+  const content = asObject(firstCandidate.content)
+  const parts = Array.isArray(content.parts) ? content.parts : []
+  const firstPart = asObject(parts[0])
+  const text = firstPart.text
+
+  if (typeof text !== 'string') {
+    throw new Error('Gemini returned no text content')
+  }
+
+  const parsed = extractJsonObjectFromModelOutput(text)
+  return parsed
+}
+
+async function requestGroqExtraction(
+  apiKey: string,
+  model: string,
+  options: {
+    systemPrompt: string
+    userPrompt: string
+    maxTokens: number
+  },
+): Promise<JsonObject> {
+  const groqModel = model || 'llama-3.1-8b-instant'
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: groqModel,
+      temperature: 0,
+      max_tokens: options.maxTokens,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: options.systemPrompt,
+        },
+        {
+          role: 'user',
+          content: options.userPrompt,
+        },
+      ],
+    }),
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(text || `Groq extraction failed (${response.status})`)
+  }
+
+  const payload = asObject(await response.json())
+  const choices = Array.isArray(payload.choices) ? payload.choices : []
+  const firstChoice = asObject(choices[0])
+  const message = asObject(firstChoice.message)
+  const content = message.content
+
+  let output = ''
+  if (typeof content === 'string') {
+    output = content
+  } else if (Array.isArray(content)) {
+    output = content
+      .map((part) => (typeof part === 'string' ? part : sanitizeString(asObject(part).text, 4000)))
+      .filter(Boolean)
+      .join('\n')
+  }
+
+  const parsed = extractJsonObjectFromModelOutput(output)
+  return parsed
+}
+
 async function runExtractionPass(
   apiKey: string,
   model: string,
   resumeText: string,
   pass: ResumeExtractionPass,
+  provider: 'openrouter' | 'gemini' | 'groq' = 'openrouter',
 ): Promise<{ extracted: Partial<ProfileRecord> | null; failure: ResumePassFailure | null }> {
   let lastError: ResumePassFailure = {
     passId: pass.id,
@@ -1791,11 +1922,26 @@ async function runExtractionPass(
 
   for (let attempt = 0; attempt < RESUME_EXTRACTION_ATTEMPTS_PER_PASS; attempt += 1) {
     try {
-      const payload = await requestOpenRouterExtraction(apiKey, model, {
-        systemPrompt: pass.systemPrompt,
-        userPrompt: createExtractionUserPrompt(pass, resumeText, attempt > 0),
-        maxTokens: pass.maxTokens,
-      })
+      let payload: JsonObject
+      if (provider === 'gemini') {
+        payload = await requestGeminiExtraction(apiKey, model, {
+          systemPrompt: pass.systemPrompt,
+          userPrompt: createExtractionUserPrompt(pass, resumeText, attempt > 0),
+          maxTokens: pass.maxTokens,
+        })
+      } else if (provider === 'groq') {
+        payload = await requestGroqExtraction(apiKey, model, {
+          systemPrompt: pass.systemPrompt,
+          userPrompt: createExtractionUserPrompt(pass, resumeText, attempt > 0),
+          maxTokens: pass.maxTokens,
+        })
+      } else {
+        payload = await requestOpenRouterExtraction(apiKey, model, {
+          systemPrompt: pass.systemPrompt,
+          userPrompt: createExtractionUserPrompt(pass, resumeText, attempt > 0),
+          maxTokens: pass.maxTokens,
+        })
+      }
       const extracted = sanitizeExtractedProfile(payload)
       if (Object.keys(extracted).length) {
         return { extracted, failure: null }
@@ -1866,12 +2012,13 @@ function uniquePassIds(passes: ResumeExtractionPass['id'][]): ResumeExtractionPa
   return output
 }
 
-async function extractProfileWithOpenRouter(
+async function extractProfileWithProvider(
   apiKey: string,
   model: string,
   resumeText: string,
   fallbackModels: string[] = [],
   requestedPasses: ResumeExtractionPass['id'][] = [],
+  provider: 'openrouter' | 'gemini' | 'groq' = 'openrouter',
 ): Promise<ResumeExtractionResult> {
   const snippet = resumeText.slice(0, RESUME_TEXT_CHAR_LIMIT)
   const modelCandidates = [model, ...fallbackModels]
@@ -1887,7 +2034,7 @@ async function extractProfileWithOpenRouter(
     const modelFailures: ResumePassFailure[] = []
 
     for (const pass of extractionPasses) {
-      const result = await runExtractionPass(apiKey, activeModel, snippet, pass)
+      const result = await runExtractionPass(apiKey, activeModel, snippet, pass, provider)
       if (result.extracted) {
         merged = mergeExtractedProfilePartials(merged, result.extracted)
       } else if (result.failure) {
@@ -1903,7 +2050,7 @@ async function extractProfileWithOpenRouter(
     const failedPassIds = uniquePassIds(modelFailures.map((failure) => failure.passId))
     const passesNeedingRecovery = findPassesNeedingRecovery(merged, failedPassIds)
     if (passesNeedingRecovery.length) {
-      const recovered = await runRecoveryExtraction(apiKey, activeModel, snippet, passesNeedingRecovery)
+      const recovered = await runRecoveryExtraction(apiKey, activeModel, snippet, passesNeedingRecovery, provider)
       if (recovered && Object.keys(recovered).length) {
         merged = applyDerivedExtractionDefaults(mergeExtractedProfilePartials(merged, recovered))
         if (normalizedRequestedPasses.length) {
@@ -1957,6 +2104,36 @@ async function extractProfileWithOpenRouter(
   }
 
   throw new Error('AI profile extraction returned no usable fields')
+}
+
+async function extractProfileWithOpenRouter(
+  apiKey: string,
+  model: string,
+  resumeText: string,
+  fallbackModels: string[] = [],
+  requestedPasses: ResumeExtractionPass['id'][] = [],
+): Promise<ResumeExtractionResult> {
+  return extractProfileWithProvider(apiKey, model, resumeText, fallbackModels, requestedPasses, 'openrouter')
+}
+
+async function extractProfileWithGemini(
+  apiKey: string,
+  model: string,
+  resumeText: string,
+  fallbackModels: string[] = [],
+  requestedPasses: ResumeExtractionPass['id'][] = [],
+): Promise<ResumeExtractionResult> {
+  return extractProfileWithProvider(apiKey, model, resumeText, fallbackModels, requestedPasses, 'gemini')
+}
+
+async function extractProfileWithGroq(
+  apiKey: string,
+  model: string,
+  resumeText: string,
+  fallbackModels: string[] = [],
+  requestedPasses: ResumeExtractionPass['id'][] = [],
+): Promise<ResumeExtractionResult> {
+  return extractProfileWithProvider(apiKey, model, resumeText, fallbackModels, requestedPasses, 'groq')
 }
 
 async function readCredential(storage: Storage, userId: string, domain: string, username = 'default'): Promise<CredentialRecord | null> {
@@ -3458,35 +3635,93 @@ app.post('/api/profile/import-resume', async (c) => {
   const filename = input.name || 'resume'
   const storage = storageFor(c)
   const config = asObject(await storage.get(userConfigKey(userId, 'default')))
+  
+  // Determine which provider to use based on available credentials and config
+  const aiProvider = asString(config.ai_provider).trim() || 'openrouter'
+  const geminiModel = asString(config.gemini_model).trim() || 'gemini-2.0-flash'
+  const groqModel = asString(config.groq_model).trim() || 'llama-3.1-8b-instant'
   const openRouterModel = asString(config.openrouter_model).trim() || 'google/gemini-2.0-flash-exp:free'
-  const openRouterFallbackModels = buildModelFallbackList(openRouterModel, config.openrouter_resume_fallback_models)
+  
+  const geminiCred = await readCredential(storage, userId, 'generativelanguage.googleapis.com')
+  const groqCred = await readCredential(storage, userId, 'api.groq.com')
   const openRouterCred = await readCredential(storage, userId, 'openrouter.ai')
+  
+  const geminiApiKey = asString(geminiCred?.password).trim()
+  const groqApiKey = asString(groqCred?.password).trim()
   const openRouterApiKey = asString(openRouterCred?.password).trim()
-
-  if (!openRouterApiKey) {
-    throw new HTTPException(400, { message: 'OpenRouter API key is not configured. Add it in Settings > Provider Keys.' })
-  }
-
-  const resumeText = await extractResumeTextFromPdf(input)
-  if (!resumeText || resumeText.length < 80) {
-    throw new HTTPException(400, {
-      message: 'Could not extract readable text from this PDF. Try a text-based PDF export.',
-    })
-  }
-
+  
   let extractionResult: ResumeExtractionResult
-  try {
-    extractionResult = await extractProfileWithOpenRouter(
-      openRouterApiKey,
-      openRouterModel,
-      resumeText,
-      openRouterFallbackModels,
-      requestedPasses,
-    )
-  } catch (error) {
-    throw new HTTPException(502, {
-      message: `AI profile extraction failed: ${compactMessage(error instanceof Error ? error.message : 'unknown error', 220)}`,
-    })
+  
+  // Select provider based on config and available credentials
+  if (aiProvider === 'gemini' && geminiApiKey) {
+    const geminiFallbackModels = buildModelFallbackList(geminiModel, config.gemini_resume_fallback_models)
+    const resumeText = await extractResumeTextFromPdf(input)
+    if (!resumeText || resumeText.length < 80) {
+      throw new HTTPException(400, {
+        message: 'Could not extract readable text from this PDF. Try a text-based PDF export.',
+      })
+    }
+    try {
+      extractionResult = await extractProfileWithGemini(
+        geminiApiKey,
+        geminiModel,
+        resumeText,
+        geminiFallbackModels,
+        requestedPasses,
+      )
+    } catch (error) {
+      throw new HTTPException(502, {
+        message: `AI profile extraction failed: ${compactMessage(error instanceof Error ? error.message : 'unknown error', 220)}`,
+      })
+    }
+  } else if (aiProvider === 'groq' && groqApiKey) {
+    const groqFallbackModels = buildModelFallbackList(groqModel, config.groq_resume_fallback_models)
+    const resumeText = await extractResumeTextFromPdf(input)
+    if (!resumeText || resumeText.length < 80) {
+      throw new HTTPException(400, {
+        message: 'Could not extract readable text from this PDF. Try a text-based PDF export.',
+      })
+    }
+    try {
+      extractionResult = await extractProfileWithGroq(
+        groqApiKey,
+        groqModel,
+        resumeText,
+        groqFallbackModels,
+        requestedPasses,
+      )
+    } catch (error) {
+      throw new HTTPException(502, {
+        message: `AI profile extraction failed: ${compactMessage(error instanceof Error ? error.message : 'unknown error', 220)}`,
+      })
+    }
+  } else {
+    // Default to OpenRouter
+    const openRouterFallbackModels = buildModelFallbackList(openRouterModel, config.openrouter_resume_fallback_models)
+    
+    if (!openRouterApiKey) {
+      throw new HTTPException(400, { message: 'OpenRouter API key is not configured. Add it in Settings > Provider Keys.' })
+    }
+
+    const resumeText = await extractResumeTextFromPdf(input)
+    if (!resumeText || resumeText.length < 80) {
+      throw new HTTPException(400, {
+        message: 'Could not extract readable text from this PDF. Try a text-based PDF export.',
+      })
+    }
+    try {
+      extractionResult = await extractProfileWithOpenRouter(
+        openRouterApiKey,
+        openRouterModel,
+        resumeText,
+        openRouterFallbackModels,
+        requestedPasses,
+      )
+    } catch (error) {
+      throw new HTTPException(502, {
+        message: `AI profile extraction failed: ${compactMessage(error instanceof Error ? error.message : 'unknown error', 220)}`,
+      })
+    }
   }
 
   const extracted = extractionResult.extracted
