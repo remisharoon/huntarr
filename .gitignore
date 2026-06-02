@@ -2,58 +2,51 @@
 # Dependencies
 node_modules/
 
-# Logs and temp files
+# Build artifacts
+dist/
+build/
+target/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.eggs/
+*.egg-info/
+.egg/
+
+# Logs
 *.log
 
 # Environment variables
 .env
 .env.local
-*.env.*
+.env.*
 
-# Editor/IDE files
+# IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# System files
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# OS generated files
 .DS_Store
 Thumbs.db
 
-# Build artifacts (from path analysis)
-dist/
-build/
-target/
-.coverage
-coverage/
-htmlcov/
-
-# Python specific
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.egg-info/
-.eggs/
-
-# Node.js specific
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# TypeScript/JavaScript build output
-*.tsbuildinfo
-.next/
-.nuxt/
-.vercel/
-
-# Database
-*.db
-*.db-journal
-
-# OS generated files
-.DS_Store?
-ehthumbs.db
-Icon?
-Thumbs.db
+# Test files
+*.test.js
+*.spec.js
+*.test.ts
+*.spec.ts
+__tests__/
 ```
