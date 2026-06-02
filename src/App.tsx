@@ -353,9 +353,9 @@ export default function App({ authEnabled = false }: AppProps) {
   const ShellNav = ({ mobile = false }: { mobile?: boolean }) => (
     <div className="flex h-full flex-col">
       <div className="border-b border-gray-200 px-4 py-5 dark:border-gray-800">
-        <img src="/brand/logo.svg" alt="Huntarr" className="h-8 w-auto dark:hidden" />
-        <img src="/brand/logo-dark.svg" alt="Huntarr" className="hidden h-8 w-auto dark:block" />
-        <p className="mt-2 text-xs uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">autonomous job ops</p>
+        <img src="/brand/logo.svg" alt="Huntarr" className="h-9 w-auto dark:hidden" />
+        <img src="/brand/logo-dark.svg" alt="Huntarr" className="hidden h-9 w-auto dark:block" />
+        <p className="mt-2.5 text-[10px] font-medium uppercase tracking-[0.25em] text-gray-400 dark:text-gray-500">autonomous job ops</p>
       </div>
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navItems.map((item) => {
