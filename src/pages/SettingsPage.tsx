@@ -140,7 +140,7 @@ export function SettingsPage() {
   const [newCredential, setNewCredential] = useState({ domain: '', username: '', password: '' })
   const [newSchedule, setNewSchedule] = useState({ name: '', cron_expr: '', timezone: 'UTC', payload: '{}' })
   const [openRouterApiKey, setOpenRouterApiKey] = useState('')
-  const [openRouterModel, setOpenRouterModel] = useState('openrouter/free')
+  const [openRouterModel, setOpenRouterModel] = useState('google/gemini-2.0-flash-exp:free')
   const [geminiApiKey, setGeminiApiKey] = useState('')
   const [groqApiKey, setGroqApiKey] = useState('')
   const [steelApiKey, setSteelApiKey] = useState('')
@@ -214,7 +214,7 @@ export function SettingsPage() {
       setUsajobsApiKey(usajobsCred?.password || '')
       setUsajobsUserAgent(usajobsCred?.metadata?.user_agent || '')
 
-      setOpenRouterModel((configRes as any)?.value?.openrouter_model || 'openrouter/free')
+      setOpenRouterModel((configRes as any)?.value?.openrouter_model || 'google/gemini-2.0-flash-exp:free')
       setSteelProjectId((configRes as any)?.value?.steel_project_id || '')
     } catch (error) {
       showErrorMessage(formatApiError(error, 'Error loading settings'))
@@ -399,7 +399,7 @@ export function SettingsPage() {
       }
 
       await saveConfig({
-        openrouter_model: openRouterModel.trim() || 'openrouter/free',
+        openrouter_model: openRouterModel.trim() || 'google/gemini-2.0-flash-exp:free',
         steel_project_id: steelProjectId.trim(),
       })
 
@@ -426,7 +426,7 @@ export function SettingsPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: openRouterModel.trim() || 'openrouter/free',
+          model: openRouterModel.trim() || 'google/gemini-2.0-flash-exp:free',
           messages: [{ role: 'user', content: 'Reply only with: ok' }],
           max_tokens: 8,
           temperature: 0,
@@ -601,7 +601,7 @@ export function SettingsPage() {
                   onChange={(event) => setOpenRouterApiKey(event.target.value)}
                 />
                 <Input
-                  placeholder="Model (e.g. openrouter/free)"
+                  placeholder="Model (e.g. google/gemini-2.0-flash-exp:free)"
                   value={openRouterModel}
                   onChange={(event) => setOpenRouterModel(event.target.value)}
                 />
