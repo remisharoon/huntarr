@@ -1313,7 +1313,7 @@ type ResumeExtractionResult = {
 const RESUME_TEXT_CHAR_LIMIT = 32000
 const RESUME_EXTRACTION_ATTEMPTS_PER_PASS = 3
 const RESUME_EXTRACTION_RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504])
-const DEFAULT_RESUME_EXTRACTION_FALLBACK_MODELS = ['openrouter/auto']
+const DEFAULT_RESUME_EXTRACTION_FALLBACK_MODELS = ['google/gemini-2.0-flash-exp:free', 'meta-llama/llama-3-8b-instruct:free']
 const RESUME_EXTRACTION_MAX_FALLBACK_MODELS = 3
 
 const RESUME_EXTRACTION_PASSES: ResumeExtractionPass[] = [
@@ -2813,7 +2813,7 @@ async function buildHuntPreflight(
 
   const openRouterCred = await readCredential(storage, userId, 'openrouter.ai')
   const openRouterApiKey = asString(openRouterCred?.password).trim()
-  const openRouterModel = asString(config.openrouter_model).trim() || 'openrouter/free'
+  const openRouterModel = asString(config.openrouter_model).trim() || 'google/gemini-2.0-flash-exp:free'
 
   if (!openRouterApiKey) {
     pushWarning('OpenRouter API key is not set. AI-powered features may fail.')
@@ -3458,7 +3458,7 @@ app.post('/api/profile/import-resume', async (c) => {
   const filename = input.name || 'resume'
   const storage = storageFor(c)
   const config = asObject(await storage.get(userConfigKey(userId, 'default')))
-  const openRouterModel = asString(config.openrouter_model).trim() || 'openrouter/free'
+  const openRouterModel = asString(config.openrouter_model).trim() || 'google/gemini-2.0-flash-exp:free'
   const openRouterFallbackModels = buildModelFallbackList(openRouterModel, config.openrouter_resume_fallback_models)
   const openRouterCred = await readCredential(storage, userId, 'openrouter.ai')
   const openRouterApiKey = asString(openRouterCred?.password).trim()
