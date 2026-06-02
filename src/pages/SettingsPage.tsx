@@ -467,6 +467,75 @@ export function SettingsPage() {
     }
   }
 
+  const testGeminiKey = async () => {
+    if (!geminiApiKey.trim()) {
+      showErrorMessage('Gemini API key is required')
+      return
+    }
+
+    setBusy(true)
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey.trim()}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: 'Reply only with: ok' }] }],
+          }),
+        },
+      )
+
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || `Gemini test failed (${response.status})`)
+      }
+
+      flashMessage('Gemini key test succeeded')
+    } catch (error) {
+      showErrorMessage(formatApiError(error, 'Gemini test failed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const testGroqKey = async () => {
+    if (!groqApiKey.trim()) {
+      showErrorMessage('Groq API key is required')
+      return
+    }
+
+    setBusy(true)
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${groqApiKey.trim()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages: [{ role: 'user', content: 'Reply only with: ok' }],
+          max_tokens: 8,
+          temperature: 0,
+        }),
+      })
+
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || `Groq test failed (${response.status})`)
+      }
+
+      flashMessage('Groq key test succeeded')
+    } catch (error) {
+      showErrorMessage(formatApiError(error, 'Groq test failed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -559,6 +628,9 @@ export function SettingsPage() {
                   onChange={(event) => setGeminiApiKey(event.target.value)}
                 />
                 <p className="text-xs text-gray-600 dark:text-gray-400">Stored as credential `generativelanguage.googleapis.com/default`.</p>
+                <Button type="button" variant="secondary" className="h-8 px-2 text-xs" onClick={testGeminiKey}>
+                  Test Gemini Key
+                </Button>
               </div>
 
               <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
@@ -579,6 +651,9 @@ export function SettingsPage() {
                   onChange={(event) => setGroqApiKey(event.target.value)}
                 />
                 <p className="text-xs text-gray-600 dark:text-gray-400">Stored as credential `api.groq.com/default`.</p>
+                <Button type="button" variant="secondary" className="h-8 px-2 text-xs" onClick={testGroqKey}>
+                  Test Groq Key
+                </Button>
               </div>
 
               <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
