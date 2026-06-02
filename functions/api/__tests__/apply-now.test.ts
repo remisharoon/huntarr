@@ -16,7 +16,10 @@ type ApiRequestInit = {
 type FetchScenario = {
   jobUrl: string
   leverSubmitOk?: boolean
+  leverTransientFailures?: number
   greenhouseSubmitOk?: boolean
+  greenhouseQuestionsOk?: boolean
+  greenhouseQuestions?: any
   steelSessionOk?: boolean
 }
 
@@ -72,10 +75,33 @@ function createExternalFetchMock(scenario: FetchScenario) {
     }
 
     if (url.startsWith('https://api.lever.co/v0/postings/')) {
+      const transientCount = scenario.leverTransientFailures || 0
+      if (transientCount > 0) {
+        scenario.leverTransientFailures = transientCount - 1
+        return jsonResponse({ error: 'rate limited' }, 429)
+      }
       if (scenario.leverSubmitOk) {
         return jsonResponse({ id: 'lever-confirmation-123' }, 200)
       }
       return jsonResponse({ error: 'lever rejected request' }, 422)
+    }
+
+    if (url.includes('boards-api.greenhouse.io') && url.includes('?questions=true')) {
+      if (scenario.greenhouseQuestionsOk === false) {
+        return jsonResponse({ error: 'question retrieval unavailable' }, 500)
+      }
+      return jsonResponse(
+        scenario.greenhouseQuestions || {
+          id: 123,
+          questions: [
+            { required: true, label: 'First Name', fields: [{ name: 'first_name', type: 'input_text' }] },
+            { required: true, label: 'Last Name', fields: [{ name: 'last_name', type: 'input_text' }] },
+            { required: true, label: 'Email', fields: [{ name: 'email', type: 'input_text' }] },
+            { required: false, label: 'LinkedIn', fields: [{ name: 'question_linkedin', type: 'input_text' }] },
+          ],
+        },
+        200,
+      )
     }
 
     if (url.startsWith('https://boards-api.greenhouse.io/v1/boards/')) {
@@ -248,7 +274,70 @@ describe('apply-now integration paths', () => {
     expect(calledSteel).toBe(false)
   })
 
-  it('falls back to manual_required with live Steel session when ATS auto-submit is unsupported', async () => {
+  it('retries Lever submit on transient 429 and still succeeds without Steel', async () => {
+    const mockedFetch = createExternalFetchMock({
+      jobUrl: 'https://jobs.lever.co/acme/role-123',
+      leverSubmitOk: true,
+      leverTransientFailures: 1,
+    })
+    globalThis.fetch = mockedFetch as typeof globalThis.fetch
+
+    const jobId = await createRunAndGetFirstJobId()
+    const apply = await callApi('/api/jobs/' + jobId + '/apply-now', { method: 'POST' })
+
+    expect(apply.status).toBe(200)
+    expect(apply.body.status).toBe('submitted')
+
+    const applications = await callApi<{ items: Array<{ artifacts?: any }> }>('/api/applications')
+    expect(applications.body.items[0].artifacts?.auto_submit_attempt?.attempts).toBe(2)
+
+    const calledSteel = mockedFetch.mock.calls.some((call) => {
+      const input = call[0]
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      return url === 'https://api.steel.dev/v1/sessions'
+    })
+    expect(calledSteel).toBe(false)
+  })
+
+  it('auto-submits via Greenhouse with question-aware mapping and no Steel', async () => {
+    const mockedFetch = createExternalFetchMock({
+      jobUrl: 'https://boards.greenhouse.io/acme/jobs/98765',
+      greenhouseSubmitOk: true,
+      greenhouseQuestionsOk: true,
+      greenhouseQuestions: {
+        id: 98765,
+        questions: [
+          { required: true, label: 'First Name', fields: [{ name: 'first_name', type: 'input_text' }] },
+          { required: true, label: 'Last Name', fields: [{ name: 'last_name', type: 'input_text' }] },
+          { required: true, label: 'Email', fields: [{ name: 'email', type: 'input_text' }] },
+          { required: false, label: 'LinkedIn', fields: [{ name: 'linkedin_profile', type: 'input_text' }] },
+        ],
+      },
+    })
+    globalThis.fetch = mockedFetch as typeof globalThis.fetch
+
+    await callApi('/api/profile', {
+      method: 'PUT',
+      body: {
+        ...BASE_PROFILE,
+        links: [{ label: 'LinkedIn', url: 'https://linkedin.com/in/taylor-example' }],
+      },
+    })
+
+    const jobId = await createRunAndGetFirstJobId()
+    const apply = await callApi('/api/jobs/' + jobId + '/apply-now', { method: 'POST' })
+
+    expect(apply.status).toBe(200)
+    expect(apply.body.status).toBe('submitted')
+
+    const applications = await callApi<{ items: Array<{ artifacts?: any }> }>('/api/applications')
+    expect(applications.body.items[0].artifacts?.auto_submit_attempt?.ats).toBe('greenhouse')
+    expect(applications.body.items[0].artifacts?.auto_submit_attempt?.mapped_fields?.linkedin_profile).toBe(
+      'https://linkedin.com/in/taylor-example',
+    )
+  })
+
+  it('falls back to manual_required without creating live Steel session when ATS auto-submit is unsupported', async () => {
     const mockedFetch = createExternalFetchMock({
       jobUrl: 'https://acme.wd5.myworkdayjobs.com/en-US/acme/job/123',
       steelSessionOk: true,
@@ -272,22 +361,108 @@ describe('apply-now integration paths', () => {
     expect(apply.body.status).toBe('manual_required')
     expect(apply.body.success).toBe(false)
     expect(typeof apply.body.manual_action_id).toBe('string')
+    expect(apply.body.session_url).toBeNull()
 
-    const manualActions = await callApi<{ items: Array<{ status: string; action_type: string }> }>('/api/manual-actions')
+    const manualActions = await callApi<{ items: Array<{ status: string; action_type: string; session_url: string | null; details?: any }> }>('/api/manual-actions')
     expect(manualActions.body.items.length).toBe(1)
     expect(manualActions.body.items[0].status).toBe('pending')
     expect(manualActions.body.items[0].action_type).toBe('complete_application_submission')
+    expect(manualActions.body.items[0].session_url).toBeNull()
+    expect(manualActions.body.items[0].details?.manual_portal_url).toBe('https://acme.wd5.myworkdayjobs.com/en-US/acme/job/123')
+
+    const calledSteel = mockedFetch.mock.calls.some((call) => {
+      const input = call[0]
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      return url === 'https://api.steel.dev/v1/sessions'
+    })
+    expect(calledSteel).toBe(false)
 
     const applications = await callApi<{ items: Array<{ status: string; artifacts?: any }> }>('/api/applications')
     expect(applications.body.items.length).toBeGreaterThan(0)
     expect(applications.body.items[0].status).toBe('manual_required')
     expect(applications.body.items[0].artifacts?.auto_submit_attempt?.ats).toBe('workday')
     expect(typeof applications.body.items[0].artifacts?.auto_submit_attempt?.error_code).toBe('string')
+    expect(applications.body.items[0].artifacts?.manual_fallback?.steel_session_policy).toBe('on_demand_only')
   })
 
-  it('marks application failed when fallback Steel session creation fails', async () => {
+  it('creates Steel session on manual start-session only', async () => {
     const mockedFetch = createExternalFetchMock({
-      jobUrl: 'https://acme.wd5.myworkdayjobs.com/en-US/acme/job/123',
+      jobUrl: 'https://careers.acme-example.com/jobs/12345',
+      steelSessionOk: true,
+    })
+    globalThis.fetch = mockedFetch as typeof globalThis.fetch
+
+    await callApi('/api/credentials', {
+      method: 'POST',
+      body: {
+        domain: 'steel.dev',
+        username: 'default',
+        password: 'test-steel-key',
+        metadata: { provider: 'steel', byok: true },
+      },
+    })
+
+    const jobId = await createRunAndGetFirstJobId()
+    const apply = await callApi('/api/jobs/' + jobId + '/apply-now', { method: 'POST' })
+
+    expect(apply.status).toBe(200)
+    expect(apply.body.status).toBe('manual_required')
+
+    const manualActions = await callApi<{ items: Array<{ id: string; session_url: string | null }> }>('/api/manual-actions')
+    expect(manualActions.body.items.length).toBe(1)
+    expect(manualActions.body.items[0].session_url).toBeNull()
+
+    const startSession = await callApi<{ session_url: string; details?: any }>(
+      '/api/manual-actions/' + manualActions.body.items[0].id + '/start-session',
+      { method: 'POST' },
+    )
+
+    expect(startSession.status).toBe(200)
+    expect(startSession.body.session_url).toBe('https://app.steel.dev/sessions/steel-session-1')
+    expect(startSession.body.details?.session_id).toBe('steel-session-1')
+
+    const calledSteel = mockedFetch.mock.calls.some((call) => {
+      const input = call[0]
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      return url === 'https://api.steel.dev/v1/sessions'
+    })
+    expect(calledSteel).toBe(true)
+  })
+
+  it('returns validation error when starting live session without Steel credential', async () => {
+    const mockedFetch = createExternalFetchMock({
+      jobUrl: 'https://careers.acme-example.com/jobs/12345',
+      steelSessionOk: true,
+    })
+    globalThis.fetch = mockedFetch as typeof globalThis.fetch
+
+    const jobId = await createRunAndGetFirstJobId()
+    const apply = await callApi('/api/jobs/' + jobId + '/apply-now', { method: 'POST' })
+
+    expect(apply.status).toBe(200)
+    expect(apply.body.status).toBe('manual_required')
+
+    const manualActions = await callApi<{ items: Array<{ id: string; session_url: string | null }> }>('/api/manual-actions')
+    expect(manualActions.body.items.length).toBe(1)
+
+    const startSession = await callApi('/api/manual-actions/' + manualActions.body.items[0].id + '/start-session', {
+      method: 'POST',
+    })
+
+    expect(startSession.status).toBe(400)
+    expect(JSON.stringify(startSession.body)).toContain('Steel API key is missing')
+
+    const calledSteel = mockedFetch.mock.calls.some((call) => {
+      const input = call[0]
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      return url === 'https://api.steel.dev/v1/sessions'
+    })
+    expect(calledSteel).toBe(false)
+  })
+
+  it('returns upstream error when on-demand Steel session creation fails', async () => {
+    const mockedFetch = createExternalFetchMock({
+      jobUrl: 'https://careers.acme-example.com/jobs/12345',
       steelSessionOk: false,
     })
     globalThis.fetch = mockedFetch as typeof globalThis.fetch
@@ -306,14 +481,116 @@ describe('apply-now integration paths', () => {
     const apply = await callApi('/api/jobs/' + jobId + '/apply-now', { method: 'POST' })
 
     expect(apply.status).toBe(200)
-    expect(apply.body.status).toBe('failed')
-    expect(apply.body.error_code).toBe('automation_error')
+    expect(apply.body.status).toBe('manual_required')
 
-    const applications = await callApi<{ items: Array<{ status: string }> }>('/api/applications')
-    expect(applications.body.items.length).toBeGreaterThan(0)
-    expect(applications.body.items[0].status).toBe('failed')
+    const manualActions = await callApi<{ items: Array<{ id: string }> }>('/api/manual-actions')
+    expect(manualActions.body.items.length).toBe(1)
 
-    const manualActions = await callApi<{ items: any[] }>('/api/manual-actions')
-    expect(manualActions.body.items.length).toBe(0)
+    const startSession = await callApi('/api/manual-actions/' + manualActions.body.items[0].id + '/start-session', {
+      method: 'POST',
+    })
+    expect(startSession.status).toBe(502)
+    expect(JSON.stringify(startSession.body)).toContain('steel session unavailable')
+  })
+
+  it('blocks live Steel start-session for ATS in strict no-steel list', async () => {
+    const mockedFetch = createExternalFetchMock({
+      jobUrl: 'https://acme.wd5.myworkdayjobs.com/en-US/acme/job/123',
+      steelSessionOk: true,
+    })
+    globalThis.fetch = mockedFetch as typeof globalThis.fetch
+
+    await callApi('/api/credentials', {
+      method: 'POST',
+      body: {
+        domain: 'steel.dev',
+        username: 'default',
+        password: 'test-steel-key',
+        metadata: { provider: 'steel', byok: true },
+      },
+    })
+
+    const jobId = await createRunAndGetFirstJobId()
+    const apply = await callApi('/api/jobs/' + jobId + '/apply-now', { method: 'POST' })
+    expect(apply.status).toBe(200)
+    expect(apply.body.status).toBe('manual_required')
+
+    const manualActions = await callApi<{ items: Array<{ id: string; details?: any }> }>('/api/manual-actions')
+    expect(manualActions.body.items[0].details?.steel_blocked_for_ats).toBe(true)
+
+    const startSession = await callApi('/api/manual-actions/' + manualActions.body.items[0].id + '/start-session', {
+      method: 'POST',
+    })
+    expect(startSession.status).toBe(400)
+    expect(JSON.stringify(startSession.body)).toContain('disabled for this ATS')
+  })
+
+  it('allows live Steel start-session for workday when no_steel_ats is explicitly empty', async () => {
+    const mockedFetch = createExternalFetchMock({
+      jobUrl: 'https://acme.wd5.myworkdayjobs.com/en-US/acme/job/123',
+      steelSessionOk: true,
+    })
+    globalThis.fetch = mockedFetch as typeof globalThis.fetch
+
+    await callApi('/api/config', {
+      method: 'PUT',
+      body: {
+        value: {
+          auto_submit_enabled: true,
+          browser_headless: true,
+          no_steel_ats: [],
+        },
+      },
+    })
+
+    await callApi('/api/credentials', {
+      method: 'POST',
+      body: {
+        domain: 'steel.dev',
+        username: 'default',
+        password: 'test-steel-key',
+        metadata: { provider: 'steel', byok: true },
+      },
+    })
+
+    const jobId = await createRunAndGetFirstJobId()
+    const apply = await callApi('/api/jobs/' + jobId + '/apply-now', { method: 'POST' })
+    expect(apply.status).toBe(200)
+    expect(apply.body.status).toBe('manual_required')
+
+    const manualActions = await callApi<{ items: Array<{ id: string; details?: any }> }>('/api/manual-actions')
+    expect(manualActions.body.items[0].details?.steel_blocked_for_ats).toBe(false)
+
+    const startSession = await callApi('/api/manual-actions/' + manualActions.body.items[0].id + '/start-session', {
+      method: 'POST',
+    })
+    expect(startSession.status).toBe(200)
+    expect(startSession.body.session_url).toBe('https://app.steel.dev/sessions/steel-session-1')
+  })
+
+  it('uses Lever hosted apply URL for non-Steel manual fallback when API submit is rejected', async () => {
+    const mockedFetch = createExternalFetchMock({
+      jobUrl: 'https://jobs.lever.co/acme/role-123',
+      leverSubmitOk: false,
+      steelSessionOk: true,
+    })
+    globalThis.fetch = mockedFetch as typeof globalThis.fetch
+
+    const jobId = await createRunAndGetFirstJobId()
+    const apply = await callApi('/api/jobs/' + jobId + '/apply-now', { method: 'POST' })
+
+    expect(apply.status).toBe(200)
+    expect(apply.body.status).toBe('manual_required')
+
+    const manualActions = await callApi<{ items: Array<{ details?: any }> }>('/api/manual-actions')
+    expect(manualActions.body.items.length).toBe(1)
+    expect(manualActions.body.items[0].details?.manual_portal_url).toBe('https://jobs.lever.co/acme/role-123/apply')
+
+    const calledSteel = mockedFetch.mock.calls.some((call) => {
+      const input = call[0]
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      return url === 'https://api.steel.dev/v1/sessions'
+    })
+    expect(calledSteel).toBe(false)
   })
 })

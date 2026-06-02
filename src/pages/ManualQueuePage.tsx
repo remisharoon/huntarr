@@ -86,15 +86,28 @@ export function ManualQueuePage({
           <div className="divide-y divide-gray-200 dark:divide-gray-800">
             {filteredActions.map((action) => {
               const urgency = deriveUrgency(action)
+              const steelBlockedForAts = action.details?.steel_blocked_for_ats === true
+              const manualPortalUrl =
+                typeof action.details?.manual_portal_url === 'string'
+                  ? action.details.manual_portal_url
+                  : typeof action.details?.job_url === 'string'
+                    ? action.details.job_url
+                    : null
+              const hasLiveSession = Boolean(action.session_url)
 
               return (
                 <div key={action.id} className="grid grid-cols-1 gap-3 px-4 py-3 md:grid-cols-[1.8fr_1.1fr_0.8fr_0.8fr_auto] md:items-center">
                   <div>
                     <p className="font-semibold text-gray-900 dark:text-gray-100">{action.company || 'Unknown company'} - {action.title || 'Untitled item'}</p>
                     <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{new Date(action.created_at).toLocaleString()}</p>
+                    {manualPortalUrl ? (
+                      <a className="mt-1 inline-block text-xs text-blue-600 hover:underline dark:text-blue-400" href={manualPortalUrl} target="_blank" rel="noreferrer">
+                        Open job portal
+                      </a>
+                    ) : null}
                     {action.session_url ? (
                       <a className="mt-1 inline-block text-xs text-blue-600 hover:underline dark:text-blue-400" href={action.session_url} target="_blank" rel="noreferrer">
-                        Open browser session
+                        Open live session
                       </a>
                     ) : null}
                   </div>
@@ -114,9 +127,15 @@ export function ManualQueuePage({
                   </div>
 
                   <div className="flex flex-wrap justify-start gap-2 md:justify-end">
-                    <Button variant="secondary" className="h-8 px-2 text-xs" onClick={() => onStart(action.id)}>
-                      Start Session
-                    </Button>
+                    {steelBlockedForAts ? (
+                      <Badge tone="info" className="h-8 px-2 text-[10px] uppercase tracking-[0.08em]">
+                        Steel Disabled For ATS
+                      </Badge>
+                    ) : (
+                      <Button variant="secondary" className="h-8 px-2 text-xs" onClick={() => onStart(action.id)}>
+                        {hasLiveSession ? 'Open Live Session' : 'Start Live Session (uses Steel credits)'}
+                      </Button>
+                    )}
                     {action.action_type === 'complete_application_submission' && action.status !== 'resolved' ? (
                       <>
                         <input

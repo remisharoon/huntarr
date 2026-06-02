@@ -41,6 +41,15 @@ Huntarr uses user-owned keys:
 
 Keys are configured from Settings and stored per-user via API.
 
+### Apply behavior defaults
+
+- `auto_submit_enabled`: default `true`
+- `browser_headless`: default `true`
+- `no_steel_ats`: default `['workday', 'smartrecruiters', 'ashby', 'bamboohr', 'icims', 'taleo']`
+
+`no_steel_ats` enforces strict portal/manual mode for listed ATS providers and blocks live Steel session start for those providers.
+Set `no_steel_ats` to an empty list (`[]`) to disable strict blocking.
+
 ## Optional Job Source Credentials
 
 These are optional and only needed if enabling the matching source in Settings.

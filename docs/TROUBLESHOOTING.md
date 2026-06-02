@@ -54,16 +54,23 @@ Symptoms:
 
 Checks:
 
-- Open the linked manual action session URL and complete final portal submission.
+- Open the job portal link in Manual Queue and complete final portal submission.
+- If portal completion is blocked, click **Start Live Session (uses Steel credits)** to launch on-demand automation.
 - In Manual Queue, resolve the manual action once submit is complete.
 - Ensure ATS credentials (if required) are present in Settings.
 - Confirm job posting URL is valid and reachable.
+
+If **Start Live Session** is unavailable:
+
+- The ATS may be in strict no-Steel mode (`workday`, `smartrecruiters`, `ashby`, `bamboohr`, `icims`, `taleo`) to reduce monthly spend.
+- Continue in portal/manual mode for this role.
+- You can change this policy in Settings (Application Behavior section).
 
 ## Auto-submit Fails But Session Opens
 
 Symptoms:
 
-- Apply does not auto-submit, but a manual action/session is created.
+- Apply does not auto-submit, and a manual action is created.
 
 Checks:
 

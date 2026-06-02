@@ -519,6 +519,55 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+const APPLY_RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504])
+
+function applyRetryDelayMs(attempt: number): number {
+  return Math.min(900, 150 * attempt)
+}
+
+async function postJsonWithRetries(
+  endpoint: string,
+  payload: JsonObject,
+  headers?: HeadersInit,
+  maxAttempts = 3,
+): Promise<{ response: Response; text: string; attempts: number }> {
+  const attemptsToUse = Math.max(1, maxAttempts)
+
+  for (let attempt = 1; attempt <= attemptsToUse; attempt += 1) {
+    try {
+      const requestHeaders = new Headers(headers || {})
+      if (!requestHeaders.has('Accept')) {
+        requestHeaders.set('Accept', 'application/json')
+      }
+      if (!requestHeaders.has('Content-Type')) {
+        requestHeaders.set('Content-Type', 'application/json')
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: requestHeaders,
+        body: JSON.stringify(payload),
+      })
+
+      const text = await response.text()
+      if (APPLY_RETRYABLE_STATUS.has(response.status) && attempt < attemptsToUse) {
+        await delay(applyRetryDelayMs(attempt))
+        continue
+      }
+
+      return { response, text, attempts: attempt }
+    } catch (error) {
+      if (attempt < attemptsToUse) {
+        await delay(applyRetryDelayMs(attempt))
+        continue
+      }
+      throw error
+    }
+  }
+
+  throw new Error('Request failed after retries')
+}
+
 function parseModelList(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value
@@ -2158,6 +2207,70 @@ type AtsKind =
   | 'taleo'
   | 'unknown'
 
+const ATS_KINDS: AtsKind[] = [
+  'greenhouse',
+  'lever',
+  'workday',
+  'smartrecruiters',
+  'ashby',
+  'bamboohr',
+  'icims',
+  'taleo',
+  'unknown',
+]
+
+const DEFAULT_NO_STEEL_ATS = new Set<AtsKind>(['workday', 'smartrecruiters', 'ashby', 'bamboohr', 'icims', 'taleo'])
+
+function parseNoSteelAtsConfig(config: JsonObject): Set<AtsKind> {
+  const hasConfiguredList = Array.isArray(config.no_steel_ats)
+  if (!hasConfiguredList) {
+    return new Set(DEFAULT_NO_STEEL_ATS)
+  }
+
+  const configured = asStringArray(config.no_steel_ats)
+  if (!configured.length) {
+    return new Set()
+  }
+
+  const allowed = new Set(ATS_KINDS)
+  const selected = configured
+    .map((value) => value.toLowerCase().trim())
+    .filter((value): value is AtsKind => allowed.has(value as AtsKind))
+
+  return new Set(selected)
+}
+
+function shouldBlockSteelForAts(ats: AtsDetection, noSteelAts: Set<AtsKind>): boolean {
+  return noSteelAts.has(ats.kind)
+}
+
+function parseLeverHostedApplyUrl(jobUrl: string): string | null {
+  const parsed = safeUrl(jobUrl)
+  if (!parsed) return null
+  const host = parsed.hostname.toLowerCase()
+  const hasLeverPath = parsed.pathname.split('/').filter(Boolean).length >= 2
+  if (!host.endsWith('lever.co') || !hasLeverPath) return null
+  const nextPath = parsed.pathname.replace(/\/+$/, '') + '/apply'
+  const candidate = `${parsed.protocol}//${parsed.host}${nextPath}`
+  return isValidUrl(candidate) ? candidate : null
+}
+
+function deriveManualPortalUrl(ats: AtsDetection, jobUrl: string, autoAttempt: AutoSubmitAttempt | null): string {
+  if (ats.kind === 'lever') {
+    const hosted = parseLeverHostedApplyUrl(jobUrl)
+    if (hosted) return hosted
+  }
+
+  if (ats.kind === 'workday') {
+    const cxsApplyUrl = asString(autoAttempt?.details?.first_job_apply_url).trim()
+    if (isValidUrl(cxsApplyUrl)) {
+      return cxsApplyUrl
+    }
+  }
+
+  return jobUrl
+}
+
 type AtsDetection = {
   kind: AtsKind
   label: string
@@ -2392,13 +2505,13 @@ function buildManualSubmissionInstructions(ats: AtsDetection, jobUrl: string): s
     return ['Greenhouse detected: sign in if prompted, then complete required fields and attachments.', ...common]
   }
   if (ats.kind === 'lever') {
-    return ['Lever detected: verify work authorization and location fields before final submit.', ...common]
+    return ['Lever detected: use the hosted apply form when available, then verify work authorization and location fields.', ...common]
   }
   if (ats.kind === 'workday') {
-    return ['Workday detected: account creation/login is often required before submitting.', ...common]
+    return ['Workday detected: account creation/login is often required before submitting; continue directly in the portal.', ...common]
   }
 
-  return [`${ats.label} detected: complete the application in the browser session for ${jobUrl}.`, ...common]
+  return [`${ats.label} detected: complete the application directly in the job portal for ${jobUrl}.`, ...common]
 }
 
 type AutoSubmitAttempt = {
@@ -2521,6 +2634,17 @@ async function attemptLeverAutoSubmit(jobUrl: string, profile: JsonObject): Prom
     location: asString(profile.location).trim(),
   }
 
+  const firstName = asString(profile.full_name).trim().split(/\s+/)[0] || ''
+  const lastName = asString(profile.full_name)
+    .trim()
+    .split(/\s+/)
+    .slice(1)
+    .join(' ')
+
+  if (!payload.name && (firstName || lastName)) {
+    payload.name = `${firstName} ${lastName}`.trim()
+  }
+
   const links = Array.isArray(profile.links)
     ? profile.links.map((item) => asObject(item)).map((item) => asString(item.url).trim()).filter(Boolean)
     : []
@@ -2531,16 +2655,9 @@ async function attemptLeverAutoSubmit(jobUrl: string, profile: JsonObject): Prom
   const endpoint = `https://api.lever.co/v0/postings/${encodeURIComponent(posting.company)}/${encodeURIComponent(posting.posting)}/apply`
 
   try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    })
-
-    const text = await response.text()
+    const requestResult = await postJsonWithRetries(endpoint, payload)
+    const response = requestResult.response
+    const text = requestResult.text
     let parsedBody: JsonObject = {}
     try {
       parsedBody = asObject(text ? JSON.parse(text) : {})
@@ -2557,6 +2674,7 @@ async function attemptLeverAutoSubmit(jobUrl: string, profile: JsonObject): Prom
           ats: 'lever',
           endpoint,
           status: response.status,
+          attempts: requestResult.attempts,
           response_body: text.slice(0, 500),
         },
       }
@@ -2578,6 +2696,7 @@ async function attemptLeverAutoSubmit(jobUrl: string, profile: JsonObject): Prom
         ats: 'lever',
         endpoint,
         status: response.status,
+        attempts: requestResult.attempts,
         confirmation_id: confirmationId || null,
       },
     }
@@ -2610,7 +2729,7 @@ async function attemptGreenhouseAutoSubmit(jobUrl: string, profile: JsonObject):
   }
 
   const names = splitName(asString(profile.full_name))
-  const payload: JsonObject = {
+  const basePayload: JsonObject = {
     first_name: names.first_name,
     last_name: names.last_name,
     email: asString(profile.email).trim(),
@@ -2619,19 +2738,93 @@ async function attemptGreenhouseAutoSubmit(jobUrl: string, profile: JsonObject):
     resume_text: asString(profile.summary).trim(),
   }
 
-  const endpoint = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(posting.board)}/jobs/${encodeURIComponent(posting.job_id)}/applications`
+  const endpoint = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(posting.board)}/jobs/${encodeURIComponent(posting.job_id)}`
+  const questionEndpoint = `${endpoint}?questions=true`
+
+  const payload: JsonObject = { ...basePayload }
+  const questionMapping: JsonObject = {}
+  const requiredQuestionsMissing: string[] = []
+  const linkedinFromProfile = (Array.isArray(profile.links) ? profile.links : [])
+    .map((item) => asObject(item))
+    .find((item) => /linkedin/i.test(asString(item.label)) || /linkedin\.com/i.test(asString(item.url)))
+  const linkedinUrl = asString(linkedinFromProfile?.url).trim()
 
   try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
+    const questionResponse = await fetch(questionEndpoint, {
+      method: 'GET',
       headers: {
         Accept: 'application/json',
-        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(payload),
     })
 
-    const text = await response.text()
+    if (questionResponse.ok) {
+      const questionBody = asObject(await questionResponse.json())
+      const questions = Array.isArray(questionBody.questions) ? questionBody.questions.map((row) => asObject(row)) : []
+      const questionValues: Record<string, string> = {
+        first_name: asString(basePayload.first_name).trim(),
+        last_name: asString(basePayload.last_name).trim(),
+        email: asString(basePayload.email).trim(),
+        phone: asString(basePayload.phone).trim(),
+        location: asString(basePayload.location).trim(),
+        resume_text: asString(basePayload.resume_text).trim(),
+      }
+
+      for (const question of questions) {
+        const fields = Array.isArray(question.fields) ? question.fields.map((field) => asObject(field)) : []
+        const required = question.required === true
+        const questionLabel = asString(question.label).trim() || 'Question'
+
+        for (const field of fields) {
+          const fieldName = asString(field.name).trim()
+          const fieldType = asString(field.type).trim()
+          if (!fieldName) continue
+
+          if (fieldName in questionValues) {
+            const value = questionValues[fieldName]
+            if (value) {
+              payload[fieldName] = value
+              questionMapping[fieldName] = value
+            } else if (required) {
+              requiredQuestionsMissing.push(questionLabel)
+            }
+            continue
+          }
+
+          if (fieldName.includes('linkedin')) {
+            if (linkedinUrl) {
+              payload[fieldName] = linkedinUrl
+              questionMapping[fieldName] = linkedinUrl
+            } else if (required) {
+              requiredQuestionsMissing.push(questionLabel)
+            }
+            continue
+          }
+
+          if (fieldType === 'textarea' && /cover|summary|about|why/i.test(fieldName)) {
+            const summary = asString(profile.summary).trim()
+            if (summary) {
+              payload[fieldName] = summary
+              questionMapping[fieldName] = summary
+            } else if (required) {
+              requiredQuestionsMissing.push(questionLabel)
+            }
+            continue
+          }
+
+          if (required) {
+            requiredQuestionsMissing.push(questionLabel)
+          }
+        }
+      }
+    }
+  } catch {
+    // Keep best-effort static payload when dynamic question retrieval fails.
+  }
+
+  try {
+    const requestResult = await postJsonWithRetries(endpoint, payload)
+    const response = requestResult.response
+    const text = requestResult.text
     let parsedBody: JsonObject = {}
     try {
       parsedBody = asObject(text ? JSON.parse(text) : {})
@@ -2648,6 +2841,9 @@ async function attemptGreenhouseAutoSubmit(jobUrl: string, profile: JsonObject):
           ats: 'greenhouse',
           endpoint,
           status: response.status,
+          attempts: requestResult.attempts,
+          mapped_fields: questionMapping,
+          required_questions_missing: requiredQuestionsMissing,
           response_body: text.slice(0, 500),
         },
       }
@@ -2669,6 +2865,9 @@ async function attemptGreenhouseAutoSubmit(jobUrl: string, profile: JsonObject):
         ats: 'greenhouse',
         endpoint,
         status: response.status,
+        attempts: requestResult.attempts,
+        mapped_fields: questionMapping,
+        required_questions_missing: requiredQuestionsMissing,
         confirmation_id: confirmationId || null,
       },
     }
@@ -4137,9 +4336,9 @@ app.post('/api/jobs/:id/apply-now', async (c) => {
 
   const autoSubmitEnabled = config.auto_submit_enabled !== false
   const browserHeadless = config.browser_headless !== false
-  const steelProjectId = asString(config.steel_project_id).trim() || null
-  const configuredSessionUrl = asString(config.session_url).trim()
   const ats = detectAtsFromJobUrl(job.url)
+  const noSteelAts = parseNoSteelAtsConfig(config)
+  const blockSteelForAts = shouldBlockSteelForAts(ats, noSteelAts)
   const profileAutofill = buildProfileAutofillPayload(profile)
   const profileAnswers = buildProfileAutofillAnswers(profile, now)
 
@@ -4163,9 +4362,10 @@ app.post('/api/jobs/:id/apply-now', async (c) => {
   let confirmationText: string | null = null
   let submittedAt: string | null = null
   let manualActionId: string | null = null
-  let sessionUrl: string | null = isValidUrl(configuredSessionUrl) ? configuredSessionUrl : null
+  let sessionUrl: string | null = null
   let sessionId: string | null = null
   let matchedCredential: MatchedCredential | null = null
+  let autoAttempt: AutoSubmitAttempt | null = null
 
   const artifacts: JsonObject = {
     mode: autoSubmitEnabled ? 'auto_submit_enabled' : 'manual_review_only',
@@ -4199,7 +4399,7 @@ app.post('/api/jobs/:id/apply-now', async (c) => {
     }
 
     if (autoSubmitEnabled) {
-      const autoAttempt = await attemptAtsAutoSubmit(ats, job.url, profile)
+      autoAttempt = await attemptAtsAutoSubmit(ats, job.url, profile)
       artifacts.auto_submit_attempt = {
         attempted_at: nowIso(),
         ...autoAttempt.details,
@@ -4236,46 +4436,50 @@ app.post('/api/jobs/:id/apply-now', async (c) => {
     }
 
     if (status !== 'submitted') {
-      const steelCred = await readCredential(storage, userId, 'steel.dev')
-      if (!steelCred) {
-        throw new Error('Steel API key is missing. Configure it in Settings before applying.')
-      }
-
-      const steelMetadata: JsonObject = {
-        source: 'huntarr-apply-now',
-        user_id: userId,
-        job_id: job.id,
-        run_id: job.run_id,
-        ats_kind: ats.kind,
-        auto_submit_enabled: autoSubmitEnabled,
-        browser_headless: browserHeadless,
-        job_url: job.url,
-        company: job.company,
-        title: job.title,
-      }
-
-      const session = await createSteelSession(steelCred.password, steelProjectId, steelMetadata)
-      sessionId = extractSteelSessionId(session)
-      sessionUrl = extractSteelSessionUrl(session) || sessionUrl
-      artifacts.steel = {
-        session_id: sessionId,
-        session_url: sessionUrl,
-        project_id: steelProjectId,
-        created_at: nowIso(),
-      }
-
       matchedCredential = await findCredentialForHostname(storage, userId, ats.hostname)
       if (matchedCredential) {
         artifacts.matched_ats_credential = matchedCredential
       }
 
       const instructions = buildManualSubmissionInstructions(ats, job.url)
+      const manualPortalUrl = deriveManualPortalUrl(ats, job.url, autoAttempt)
       artifacts.manual_instructions = instructions
+      artifacts.manual_portal_url = manualPortalUrl
 
       const manualActions = await listCollection<ManualActionRecord>(storage, userId, 'manual-action')
       const existingAction = manualActions.find(
         (item) => item.job_id === job.id && item.action_type === 'complete_application_submission' && item.status !== 'resolved',
       )
+      const existingDetails = asObject(existingAction?.details)
+      const existingSessionUrl = isValidUrl(asString(existingAction?.session_url))
+        ? asString(existingAction?.session_url).trim()
+        : isValidUrl(asString(existingDetails.session_url))
+          ? asString(existingDetails.session_url).trim()
+          : null
+      const existingSessionId = asString(existingDetails.session_id).trim() || null
+
+      sessionId = existingSessionId
+      sessionUrl = existingSessionUrl
+
+      artifacts.manual_fallback = {
+        status: 'manual_required',
+        reason: autoSubmitEnabled
+          ? autoAttempt?.error_code || 'autosubmit_not_submitted'
+          : 'autosubmit_disabled',
+        steel_session_policy: 'on_demand_only',
+        steel_blocked_for_ats: blockSteelForAts,
+        no_steel_ats: [...noSteelAts],
+        created_at: nowIso(),
+      }
+
+      if (sessionId || sessionUrl) {
+        artifacts.steel = {
+          session_id: sessionId,
+          session_url: sessionUrl,
+          reused_existing_session: true,
+          reused_at: nowIso(),
+        }
+      }
 
       const actionPayload: ManualActionRecord = {
         id: existingAction?.id || createId('manual'),
@@ -4287,13 +4491,17 @@ app.post('/api/jobs/:id/apply-now', async (c) => {
         status: 'pending',
         session_url: sessionUrl,
         details: {
+          ...existingDetails,
           ats_kind: ats.kind,
           ats_label: ats.label,
           hostname: ats.hostname,
           job_url: job.url,
+          manual_portal_url: manualPortalUrl,
           session_id: sessionId,
           session_url: sessionUrl,
           instructions,
+          live_session_policy: 'on_demand',
+          steel_blocked_for_ats: blockSteelForAts,
           profile_autofill: profileAutofill,
           matched_ats_credential: matchedCredential,
         },
@@ -4307,7 +4515,9 @@ app.post('/api/jobs/:id/apply-now', async (c) => {
       status = 'manual_required'
       errorCode = null
       confirmationText =
-        'Live Steel browser session created and profile autofill payload prepared. Manual completion is currently required to finalize submission.'
+        blockSteelForAts
+          ? 'Auto-submit did not complete. Manual completion is required in the ATS portal. Live Steel sessions are disabled for this ATS to save credits.'
+          : 'Auto-submit did not complete. Manual completion is required. Open the job portal first; start a live Steel session only if needed.'
 
       if (job.run_id) {
         await appendRunEvent(storage, userId, job.run_id, {
@@ -4327,11 +4537,9 @@ app.post('/api/jobs/:id/apply-now', async (c) => {
   } catch (error) {
     const message = compactMessage(error instanceof Error ? error.message : 'unknown apply error', 260)
     errorCode =
-      /steel api key is missing/i.test(message)
-        ? 'missing_steel_key'
-        : /valid application url/i.test(message)
-          ? 'invalid_job_url'
-          : 'automation_error'
+      /valid application url/i.test(message)
+        ? 'invalid_job_url'
+        : 'automation_error'
     status = 'failed'
     confirmationText = `Automation failed before submission: ${message}`
     artifacts.failure = {
@@ -4489,11 +4697,79 @@ app.post('/api/manual-actions/:id/start-session', async (c) => {
   }
 
   const config = asObject(await storage.get(userConfigKey(userId, 'default')))
-  const configuredSessionUrl = asString(config.session_url).trim()
+  const existingSessionUrl = isValidUrl(asString(action.session_url)) ? asString(action.session_url).trim() : null
+  const configuredSessionUrl = isValidUrl(asString(config.session_url)) ? asString(config.session_url).trim() : null
+  const existingDetails = asObject(action.details)
+  const existingSessionId = asString(existingDetails.session_id).trim() || null
+  const atsKind = asString(existingDetails.ats_kind).trim() as AtsKind
+  const noSteelAts = parseNoSteelAtsConfig(config)
+  const steelBlockedForAts =
+    existingDetails.steel_blocked_for_ats === true ||
+    (ATS_KINDS.includes(atsKind) && shouldBlockSteelForAts({ kind: atsKind, label: atsKind, hostname: null }, noSteelAts))
+
+  let sessionId = existingSessionId
+  let sessionUrl = existingSessionUrl || configuredSessionUrl
+
+  if (!sessionUrl) {
+    if (steelBlockedForAts) {
+      throw new HTTPException(400, {
+        message: 'Live Steel sessions are disabled for this ATS to reduce monthly credit usage.',
+      })
+    }
+
+    const steelCred = await readCredential(storage, userId, 'steel.dev')
+    if (!steelCred) {
+      throw new HTTPException(400, {
+        message: 'Steel API key is missing. Configure it in Settings before starting a live session.',
+      })
+    }
+
+    const projectId = asString(config.steel_project_id).trim() || null
+    const jobId = asString(action.job_id).trim()
+    const job = jobId ? await getCollectionItem<JobRecord>(storage, userId, 'job', jobId) : null
+    const metadata: JsonObject = {
+      source: 'huntarr-manual-start-session',
+      user_id: userId,
+      manual_action_id: action.id,
+      action_type: action.action_type,
+      run_id: action.run_id,
+      job_id: job?.id || action.job_id,
+      ats_kind: asString(existingDetails.ats_kind).trim() || null,
+      auto_submit_enabled: config.auto_submit_enabled !== false,
+      browser_headless: config.browser_headless !== false,
+      job_url: asString(existingDetails.job_url).trim() || job?.url || null,
+      company: job?.company || action.company,
+      title: job?.title || action.title,
+    }
+
+    let session: JsonObject
+    try {
+      session = await createSteelSession(steelCred.password, projectId, metadata)
+    } catch (error) {
+      throw new HTTPException(502, {
+        message: compactMessage(error instanceof Error ? error.message : 'Steel API request failed', 220),
+      })
+    }
+
+    sessionId = extractSteelSessionId(session)
+    sessionUrl = extractSteelSessionUrl(session)
+    if (!sessionUrl) {
+      throw new HTTPException(502, { message: 'Steel session created but no session URL was returned.' })
+    }
+  }
+
   const next: ManualActionRecord = {
     ...action,
     status: 'pending',
-    session_url: action.session_url || configuredSessionUrl || 'https://app.steel.dev/',
+    session_url: sessionUrl || configuredSessionUrl || 'https://app.steel.dev/',
+    details: {
+      ...existingDetails,
+      session_id: sessionId,
+      session_url: sessionUrl,
+      live_session_policy: 'on_demand',
+      steel_blocked_for_ats: steelBlockedForAts,
+      live_session_started_at: nowIso(),
+    },
     updated_at: nowIso(),
   }
 

@@ -137,7 +137,11 @@ Run events include per-source fetch, warning, and failure details.
 Behavior:
 
 - Attempts ATS API auto-submit for supported portals (currently Lever and Greenhouse).
-- If auto-submit is not possible, creates a live Steel session (requires `steel.dev` credential).
+- Applies retry/backoff for transient ATS API failures (for example `429` / `5xx`) before fallback.
+- Uses dynamic Greenhouse question mapping (`questions=true`) to improve non-Steel auto-submit success.
+- If auto-submit is not possible, creates/updates a `manual_required` task with non-Steel portal instructions first.
+- Live Steel sessions are created only when `POST /api/manual-actions/{id}/start-session` is called.
+- Some ATS providers are configured as strict no-Steel by default (`workday`, `smartrecruiters`, `ashby`, `bamboohr`, `icims`, `taleo`).
 - Detects ATS provider from job URL when possible (Greenhouse, Lever, Workday, and others).
 - Stores profile-derived autofill payload into application artifacts.
 - Creates/updates a manual action for final submit confirmation.
@@ -150,7 +154,7 @@ Response shape:
   "application_id": "app_...",
   "status": "manual_required",
   "manual_action_id": "manual_...",
-  "session_url": "https://app.steel.dev/...",
+  "session_url": null,
   "error_code": null
 }
 ```
@@ -158,7 +162,7 @@ Response shape:
 Possible `status` values:
 
 - `submitted` (auto-submitted via ATS API, already submitted, or marked submitted after manual resolution)
-- `manual_required` (live session created; operator confirmation required)
+- `manual_required` (non-Steel portal/manual completion required; live session may be started later when allowed)
 - `failed` (could not initialize automation pipeline)
 
 ### Manual Submission Confirmation

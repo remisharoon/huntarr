@@ -96,6 +96,11 @@ export function JobDetailPage({ jobId, onBack, onViewApplication }: { jobId: str
             <div className="space-y-2">
               {job.manual_actions.map((action: any) => (
                 <Card key={action.id} className="text-sm">
+                  {typeof action.details?.manual_portal_url === 'string' && action.details.manual_portal_url ? (
+                    <a href={action.details.manual_portal_url} target="_blank" rel="noreferrer" className="mb-2 block text-xs text-blue-600 dark:text-blue-400">
+                      Job Portal {'->'}
+                    </a>
+                  ) : null}
                   <div className="flex items-center justify-between">
                     <span className="font-semibold flex items-center gap-2">
                       <ShieldAlert size={16} />

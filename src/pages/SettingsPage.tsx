@@ -79,6 +79,27 @@ const defaultJobSources: JobSources = jobSourceDefinitions.reduce<JobSources>((a
   return acc
 }, {})
 
+const atsNoSteelDefaults = ['workday', 'smartrecruiters', 'ashby', 'bamboohr', 'icims', 'taleo']
+
+const noSteelAtsOptions = [
+  { id: 'workday', label: 'Workday' },
+  { id: 'smartrecruiters', label: 'SmartRecruiters' },
+  { id: 'ashby', label: 'Ashby' },
+  { id: 'bamboohr', label: 'BambooHR' },
+  { id: 'icims', label: 'iCIMS' },
+  { id: 'taleo', label: 'Taleo / Oracle' },
+  { id: 'unknown', label: 'Unknown ATS' },
+  { id: 'greenhouse', label: 'Greenhouse' },
+  { id: 'lever', label: 'Lever' },
+]
+
+function normalizeNoSteelAts(value: unknown): string[] {
+  const fromConfig = Array.isArray(value)
+    ? value.map((item) => String(item).trim().toLowerCase()).filter(Boolean)
+    : atsNoSteelDefaults
+  return [...new Set(fromConfig)]
+}
+
 function normalizeJobSources(source: unknown): JobSources {
   const normalized = { ...defaultJobSources }
   if (!source || typeof source !== 'object') {
@@ -150,6 +171,7 @@ export function SettingsPage() {
   const [adzunaApiKey, setAdzunaApiKey] = useState('')
   const [usajobsApiKey, setUsajobsApiKey] = useState('')
   const [usajobsUserAgent, setUsajobsUserAgent] = useState('')
+  const [noSteelAts, setNoSteelAts] = useState<string[]>(atsNoSteelDefaults)
 
   // Collapsed state for config blocks
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
@@ -218,6 +240,7 @@ export function SettingsPage() {
       setOpenRouterModel((configRes as any)?.value?.openrouter_model || 'google/gemini-2.0-flash-exp:free')
       setGeminiModel((configRes as any)?.value?.gemini_model || 'gemini-2.0-flash')
       setSteelProjectId((configRes as any)?.value?.steel_project_id || '')
+      setNoSteelAts(normalizeNoSteelAts((configRes as any)?.value?.no_steel_ats))
     } catch (error) {
       showErrorMessage(formatApiError(error, 'Error loading settings'))
     }
@@ -257,6 +280,13 @@ export function SettingsPage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  const toggleNoSteelAts = async (atsId: string, enabled: boolean) => {
+    const next = enabled ? [...new Set([...noSteelAts, atsId])] : noSteelAts.filter((item) => item !== atsId)
+    setNoSteelAts(next)
+    setConfig({ ...config, no_steel_ats: next })
+    await saveConfig({ no_steel_ats: next })
   }
 
   const addCredential = async (event: FormEvent) => {
@@ -838,6 +868,37 @@ export function SettingsPage() {
                   onChange={(event) => setConfig({ ...config, session_url: event.target.value })}
                   onBlur={(event) => saveConfig({ session_url: event.target.value })}
                 />
+              </div>
+
+              <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Strict no-Steel ATS policy</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  These ATS providers always stay portal/manual only to preserve credits. Steel session launch is blocked.
+                </p>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {noSteelAtsOptions.map((option) => {
+                    const enabled = noSteelAts.includes(option.id)
+                    return (
+                      <label
+                        key={option.id}
+                        className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-2 py-1.5 dark:border-gray-700 dark:bg-gray-900"
+                      >
+                        <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">{option.label}</span>
+                        <input
+                          type="checkbox"
+                          checked={enabled}
+                          disabled={busy}
+                          onChange={(event) => {
+                            void toggleNoSteelAts(option.id, event.target.checked)
+                          }}
+                        />
+                      </label>
+                    )
+                  })}
+                </div>
+                <p className="text-[11px] text-gray-600 dark:text-gray-400">
+                  Tip: keep Workday/SmartRecruiters/iCIMS/Taleo enabled here for maximum Steel credit savings.
+                </p>
               </div>
             </>
           )}
