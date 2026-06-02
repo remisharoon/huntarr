@@ -142,6 +142,7 @@ export function SettingsPage() {
   const [openRouterApiKey, setOpenRouterApiKey] = useState('')
   const [openRouterModel, setOpenRouterModel] = useState('google/gemini-2.0-flash-exp:free')
   const [geminiApiKey, setGeminiApiKey] = useState('')
+  const [geminiModel, setGeminiModel] = useState('gemini-2.0-flash')
   const [groqApiKey, setGroqApiKey] = useState('')
   const [steelApiKey, setSteelApiKey] = useState('')
   const [steelProjectId, setSteelProjectId] = useState('')
@@ -215,6 +216,7 @@ export function SettingsPage() {
       setUsajobsUserAgent(usajobsCred?.metadata?.user_agent || '')
 
       setOpenRouterModel((configRes as any)?.value?.openrouter_model || 'google/gemini-2.0-flash-exp:free')
+      setGeminiModel((configRes as any)?.value?.gemini_model || 'gemini-2.0-flash')
       setSteelProjectId((configRes as any)?.value?.steel_project_id || '')
     } catch (error) {
       showErrorMessage(formatApiError(error, 'Error loading settings'))
@@ -400,6 +402,7 @@ export function SettingsPage() {
 
       await saveConfig({
         openrouter_model: openRouterModel.trim() || 'google/gemini-2.0-flash-exp:free',
+        gemini_model: geminiModel.trim() || 'gemini-2.0-flash',
         steel_project_id: steelProjectId.trim(),
       })
 
@@ -475,8 +478,9 @@ export function SettingsPage() {
 
     setBusy(true)
     try {
+      const modelToTest = geminiModel.trim() || 'gemini-2.0-flash'
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey.trim()}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelToTest}:generateContent?key=${geminiApiKey.trim()}`,
         {
           method: 'POST',
           headers: {
@@ -626,6 +630,11 @@ export function SettingsPage() {
                   placeholder="Gemini API key"
                   value={geminiApiKey}
                   onChange={(event) => setGeminiApiKey(event.target.value)}
+                />
+                <Input
+                  placeholder="Model (e.g. gemini-2.0-flash)"
+                  value={geminiModel}
+                  onChange={(event) => setGeminiModel(event.target.value)}
                 />
                 <p className="text-xs text-gray-600 dark:text-gray-400">Stored as credential `generativelanguage.googleapis.com/default`.</p>
                 <Button type="button" variant="secondary" className="h-8 px-2 text-xs" onClick={testGeminiKey}>
