@@ -33,6 +33,16 @@ import type { Profile, ThemeMode } from './types'
 
 type View = 'dashboard' | 'jobs' | 'manual' | 'profile' | 'runs' | 'settings' | 'job-detail' | 'application-detail' | 'run-detail'
 
+const defaultNoSteelAts = ['workday', 'smartrecruiters', 'ashby', 'bamboohr', 'icims', 'taleo']
+
+function normalizeNoSteelAts(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [...defaultNoSteelAts]
+  }
+
+  return [...new Set(value.map((item) => String(item).trim().toLowerCase()).filter(Boolean))]
+}
+
 function routePathForView(view: Extract<View, 'dashboard' | 'jobs' | 'manual' | 'profile' | 'runs' | 'settings'>): string {
   switch (view) {
     case 'dashboard':
@@ -128,6 +138,7 @@ export default function App({ authEnabled = false }: AppProps) {
   const [runs, setRuns] = useState<any[]>([])
   const [jobs, setJobs] = useState<any[]>([])
   const [jobsCounts, setJobsCounts] = useState({ total: 0, new: 0, queued: 0, applied: 0 })
+  const [noSteelAts, setNoSteelAts] = useState<string[]>([...defaultNoSteelAts])
   const [applications, setApplications] = useState<any[]>([])
   const [manualActions, setManualActions] = useState<any[]>([])
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -144,16 +155,18 @@ export default function App({ authEnabled = false }: AppProps) {
   const refresh = async () => {
     try {
       setError(null)
-      const [runsRes, jobsRes, appRes, manualRes, profileRes] = await Promise.all([
+      const [runsRes, jobsRes, appRes, manualRes, profileRes, configRes] = await Promise.all([
         api.listRuns(),
         api.listJobs(),
         api.listApplications(),
         api.listManualActions(),
         api.getProfile(),
+        api.getConfig(),
       ])
       setRuns(runsRes.items)
       setJobs(jobsRes.items || [])
       setJobsCounts(jobsRes.counts || { total: 0, new: 0, queued: 0, applied: 0 })
+      setNoSteelAts(normalizeNoSteelAts((configRes as any)?.value?.no_steel_ats))
       setApplications(appRes.items)
       setManualActions(manualRes.items)
       setProfile(profileRes)
@@ -530,7 +543,16 @@ export default function App({ authEnabled = false }: AppProps) {
             ) : null}
 
             {view === 'dashboard' ? <DashboardPage runs={runs} jobs={jobs} manualActions={manualActions} applications={applications} /> : null}
-            {view === 'jobs' ? <JobsPage jobs={jobs} counts={jobsCounts} onApplyNow={onApplyNow} onViewJob={onViewJob} onDeleteAll={onDeleteAll} /> : null}
+            {view === 'jobs' ? (
+              <JobsPage
+                jobs={jobs}
+                counts={jobsCounts}
+                noSteelAts={noSteelAts}
+                onApplyNow={onApplyNow}
+                onViewJob={onViewJob}
+                onDeleteAll={onDeleteAll}
+              />
+            ) : null}
             {view === 'manual' ? <ManualQueuePage actions={manualActions} onStart={onStartManual} onResolve={onResolveManual} /> : null}
             {view === 'profile' ? (
                 <ProfilePage
