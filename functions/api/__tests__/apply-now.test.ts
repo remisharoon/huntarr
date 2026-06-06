@@ -13,6 +13,11 @@ type ApiRequestInit = {
   body?: unknown
 }
 
+type ApiEnv = {
+  CLERK_JWKS_URL?: string
+  CLERK_ISSUER?: string
+}
+
 type FetchScenario = {
   jobUrl: string
   leverSubmitOk?: boolean
@@ -151,6 +156,10 @@ function createExternalFetchMock(scenario: FetchScenario) {
 }
 
 async function callApi<T = any>(path: string, init?: ApiRequestInit): Promise<ApiResult<T>> {
+  return callApiWithEnv(path, {}, init)
+}
+
+async function callApiWithEnv<T = any>(path: string, env: ApiEnv, init?: ApiRequestInit): Promise<ApiResult<T>> {
   const headers = new Headers(init?.headers)
   const hasBodyObject = Boolean(init?.body) && typeof init?.body === 'object' && !(init?.body instanceof FormData)
   const body = hasBodyObject ? JSON.stringify(init?.body) : init?.body
@@ -167,7 +176,7 @@ async function callApi<T = any>(path: string, init?: ApiRequestInit): Promise<Ap
 
   const response = await onRequest({
     request,
-    env: {},
+    env,
     params: {},
     data: {},
     waitUntil: () => undefined,
@@ -592,5 +601,32 @@ describe('apply-now integration paths', () => {
       return url === 'https://api.steel.dev/v1/sessions'
     })
     expect(calledSteel).toBe(false)
+  })
+})
+
+describe('auth middleware hardening', () => {
+  it('returns 500 when bearer token is provided but Clerk backend config is missing', async () => {
+    const response = await callApi('/api/profile', {
+      headers: {
+        Authorization: 'Bearer fake-token',
+      },
+    })
+
+    expect(response.status).toBe(500)
+    expect(JSON.stringify(response.body)).toContain('Clerk auth misconfigured')
+  })
+
+  it('returns 401 when Clerk backend is configured but bearer token is missing', async () => {
+    const response = await callApiWithEnv(
+      '/api/profile',
+      {
+        CLERK_JWKS_URL: 'https://clerk.example.test/.well-known/jwks.json',
+        CLERK_ISSUER: 'https://clerk.example.test',
+      },
+      {},
+    )
+
+    expect(response.status).toBe(401)
+    expect(JSON.stringify(response.body)).toContain('Missing bearer token')
   })
 })

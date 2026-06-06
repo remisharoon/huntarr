@@ -3613,6 +3613,11 @@ app.use('/api/*', async (c, next) => {
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
 
   if (!hasJwks && !hasIssuer) {
+    if (token) {
+      throw new HTTPException(500, {
+        message: 'Clerk auth misconfigured: set both CLERK_JWKS_URL and CLERK_ISSUER',
+      })
+    }
     c.set('userId', DEFAULT_USER_ID)
     await next()
     return
